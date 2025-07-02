@@ -356,10 +356,14 @@ const ProductionCRM = () => {
     }
   };
 
-  // Dashboard stats
+  // Dashboard stats - NOW WITH CASE-INSENSITIVE COUNTING
   const totalOnboardings = clients.length;
-  const totalTMCs = [...new Set(clients.flatMap(c => c.tmcs?.map(t => t.value) || []))].length;
-  const totalSSOs = [...new Set(clients.flatMap(c => c.sso_systems?.map(s => s.value) || []))].length;
+  
+  // Case-insensitive TMC counting
+  const totalTMCs = [...new Set(clients.flatMap(c => c.tmcs?.map(t => t.value.toLowerCase()) || []))].length;
+  
+  // Case-insensitive SSO counting
+  const totalSSOs = [...new Set(clients.flatMap(c => c.sso_systems?.map(s => s.value.toLowerCase()) || []))].length;
   
   const statusBreakdown = clients.reduce((acc, client) => {
     acc[client.status] = (acc[client.status] || 0) + 1;
@@ -370,9 +374,17 @@ const ProductionCRM = () => {
     value: count
   }));
 
+  // Case-insensitive TMC counting with proper display names
   const tmcCounts = clients.flatMap(c => c.tmcs?.map(t => t.value) || [])
     .reduce((acc, tmc) => {
-      acc[tmc] = (acc[tmc] || 0) + 1;
+      const lowerTmc = tmc.toLowerCase();
+      // Find existing entry with same lowercase value
+      const existingKey = Object.keys(acc).find(key => key.toLowerCase() === lowerTmc);
+      if (existingKey) {
+        acc[existingKey] = acc[existingKey] + 1;
+      } else {
+        acc[tmc] = 1; // Use original casing for display
+      }
       return acc;
     }, {});
   const mostIntegratedTMC = Object.keys(tmcCounts).reduce((a, b) => tmcCounts[a] > tmcCounts[b] ? a : b, '') || 'None';
@@ -381,9 +393,17 @@ const ProductionCRM = () => {
     value: count
   }));
 
+  // Case-insensitive SSO counting with proper display names
   const ssoCounts = clients.flatMap(c => c.sso_systems?.map(s => s.value) || [])
     .reduce((acc, sso) => {
-      acc[sso] = (acc[sso] || 0) + 1;
+      const lowerSso = sso.toLowerCase();
+      // Find existing entry with same lowercase value
+      const existingKey = Object.keys(acc).find(key => key.toLowerCase() === lowerSso);
+      if (existingKey) {
+        acc[existingKey] = acc[existingKey] + 1;
+      } else {
+        acc[sso] = 1; // Use original casing for display
+      }
       return acc;
     }, {});
   const mostIntegratedSSO = Object.keys(ssoCounts).reduce((a, b) => ssoCounts[a] > ssoCounts[b] ? a : b, '') || 'None';
