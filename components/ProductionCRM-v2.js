@@ -758,3 +758,516 @@ const ProductionCRM = () => {
               <h3 className="font-semibold text-gray-700 mb-2">TMCs</h3>
               <div className="space-y-2">
                 {(client.tmcs || []).map((tmc, index) => (
+                  <div key={index} className="bg-gray-50 p-2 rounded">
+                    <span className="font-medium">{tmc.value}</span>
+                    {tmc.comment && <p className="text-sm text-gray-600">{tmc.comment}</p>}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <h3 className="font-semibold text-gray-700 mb-2">Notes</h3>
+              <p className="text-gray-600 bg-gray-50 p-3 rounded">{client.notes}</p>
+            </div>
+
+            <div>
+              <h3 className="font-semibold text-gray-700 mb-2">Comments</h3>
+              <p className="text-gray-600 bg-gray-50 p-3 rounded">{client.comments}</p>
+            </div>
+
+            <div>
+              <h3 className="font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                <History size={16} />
+                Audit Log for this Client
+              </h3>
+              <div className="space-y-2 max-h-60 overflow-y-auto bg-gray-50 p-3 rounded">
+                {clientAuditLog.length > 0 ? clientAuditLog.map((log, index) => (
+                  <div key={index} className="bg-white p-3 rounded text-sm border-l-4 border-blue-200">
+                    <div className="flex justify-between items-start mb-1">
+                      <span className="font-medium text-blue-800">{log.action}</span>
+                      <span className="text-gray-500 text-xs">{new Date(log.created_at).toLocaleString()}</span>
+                    </div>
+                    <div className="text-gray-700">
+                      <span className="font-medium">Field:</span> {log.field_name}
+                    </div>
+                    {log.old_value && (
+                      <div className="text-gray-600 text-xs">
+                        <span className="font-medium">Previous:</span> {log.old_value}
+                      </div>
+                    )}
+                    <div className="text-gray-800 text-xs">
+                      <span className="font-medium">New:</span> {log.new_value}
+                    </div>
+                  </div>
+                )) : (
+                  <p className="text-gray-500 text-center py-4">No changes recorded for this client yet.</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Loading state with timeout
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-xl mb-4">Loading CI360 CRM...</div>
+          {error && (
+            <div className="text-red-600 text-sm mb-4">{error}</div>
+          )}
+          <div className="text-gray-500 text-sm">
+            If this takes more than 10 seconds, please refresh the page
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Login screen
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
+          <h1 className="text-2xl font-bold text-center mb-6">CI360 Client CRM</h1>
+          
+          {error && (
+            <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+              <p className="text-sm">{error}</p>
+            </div>
+          )}
+
+          {(!SUPABASE_URL || !SUPABASE_ANON_KEY) && (
+            <div className="mb-4 p-3 bg-yellow-100 border border-yellow-400 text-yellow-700 rounded">
+              <p className="text-sm">⚠️ Configuration issue detected</p>
+            </div>
+          )}
+          
+          <form onSubmit={signIn} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={authLoading}
+              className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors"
+            >
+              {authLoading ? 'Signing in...' : 'Sign In'}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  // Main app
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {error && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 text-sm">
+          {error} 
+          <button 
+            onClick={() => setError(null)} 
+            className="ml-2 underline"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      <div className="bg-white shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center py-4">
+            <h1 className="text-2xl font-bold text-gray-900">CI360 Client CRM</h1>
+            <div className="flex items-center space-x-4">
+              <span className="text-sm text-gray-600">Welcome, {user.email}</span>
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => setActiveTab('dashboard')}
+                  className={`px-4 py-2 rounded-md ${activeTab === 'dashboard' ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}
+                >
+                  <BarChart3 size={18} className="inline mr-2" />
+                  Dashboard
+                </button>
+                <button
+                  onClick={() => setActiveTab('clients')}
+                  className={`px-4 py-2 rounded-md ${activeTab === 'clients' ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}
+                >
+                  <Users size={18} className="inline mr-2" />
+                  Clients
+                </button>
+                <button
+                  onClick={() => setShowAuditLog(true)}
+                  className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-md"
+                >
+                  <History size={18} className="inline mr-2" />
+                  Audit Log
+                </button>
+                <button
+                  onClick={signOut}
+                  className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-md"
+                >
+                  <LogOut size={18} className="inline mr-2" />
+                  Sign Out
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {activeTab === 'dashboard' && (
+          <div className="space-y-6">
+            <h2 className="text-xl font-semibold text-gray-900">Dashboard Overview</h2>
+            
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+              <div 
+                className={`bg-white p-4 rounded-lg shadow hover:shadow-lg transition-all duration-200 cursor-pointer relative ${hoveredCard === 'onboardings' ? 'z-[90]' : 'z-10'}`}
+                style={{ zIndex: hoveredCard === 'onboardings' ? 9998 : 10 }}
+                onMouseEnter={() => setHoveredCard('onboardings')}
+                onMouseLeave={() => setHoveredCard(null)}
+              >
+                <div className="flex flex-col items-center text-center">
+                  <Users className="text-blue-600 mb-2" size={20} />
+                  <h3 className="text-xs font-medium text-gray-500 mb-1">Total Onboardings</h3>
+                  <p className="text-xl font-bold text-gray-900">{totalOnboardings}</p>
+                </div>
+                {hoveredCard === 'onboardings' && statusChartData.length > 0 && (
+                  <HoverTooltip 
+                    data={statusChartData} 
+                    title="Onboarding Status Breakdown" 
+                    type="chart"
+                  />
+                )}
+              </div>
+              
+              <div 
+                className={`bg-white p-4 rounded-lg shadow hover:shadow-lg transition-all duration-200 cursor-pointer relative ${hoveredCard === 'tmcs' ? 'z-[90]' : 'z-10'}`}
+                style={{ zIndex: hoveredCard === 'tmcs' ? 9998 : 10 }}
+                onMouseEnter={() => setHoveredCard('tmcs')}
+                onMouseLeave={() => setHoveredCard(null)}
+              >
+                <div className="flex flex-col items-center text-center">
+                  <Building className="text-green-600 mb-2" size={20} />
+                  <h3 className="text-xs font-medium text-gray-500 mb-1">Total TMCs</h3>
+                  <p className="text-xl font-bold text-gray-900">{totalTMCs}</p>
+                </div>
+                {hoveredCard === 'tmcs' && tmcChartData.length > 0 && (
+                  <HoverTooltip 
+                    data={tmcChartData} 
+                    title="TMC Distribution" 
+                    type="chart"
+                  />
+                )}
+              </div>
+
+              <div 
+                className={`bg-white p-4 rounded-lg shadow hover:shadow-lg transition-all duration-200 cursor-pointer relative ${hoveredCard === 'ssos' ? 'z-[90]' : 'z-10'}`}
+                style={{ zIndex: hoveredCard === 'ssos' ? 9998 : 10 }}
+                onMouseEnter={() => setHoveredCard('ssos')}
+                onMouseLeave={() => setHoveredCard(null)}
+              >
+                <div className="flex flex-col items-center text-center">
+                  <Shield className="text-purple-600 mb-2" size={20} />
+                  <h3 className="text-xs font-medium text-gray-500 mb-1">Total SSOs</h3>
+                  <p className="text-xl font-bold text-gray-900">{totalSSOs}</p>
+                </div>
+                {hoveredCard === 'ssos' && ssoChartData.length > 0 && (
+                  <HoverTooltip 
+                    data={ssoChartData} 
+                    title="SSO Distribution" 
+                    type="chart"
+                  />
+                )}
+              </div>
+              
+              <div 
+                className={`bg-white p-4 rounded-lg shadow hover:shadow-lg transition-all duration-200 cursor-pointer relative ${hoveredCard === 'mostTmc' ? 'z-[90]' : 'z-10'}`}
+                style={{ zIndex: hoveredCard === 'mostTmc' ? 9998 : 10 }}
+                onMouseEnter={() => setHoveredCard('mostTmc')}
+                onMouseLeave={() => setHoveredCard(null)}
+              >
+                <div className="flex flex-col items-center text-center">
+                  <Building className="text-indigo-600 mb-2" size={20} />
+                  <h3 className="text-xs font-medium text-gray-500 mb-1">Most Integrated TMC</h3>
+                  <p className="text-sm font-bold text-gray-900">{mostIntegratedTMC}</p>
+                </div>
+                {hoveredCard === 'mostTmc' && tmcChartData.length > 0 && (
+                  <HoverTooltip 
+                    data={tmcChartData} 
+                    title="TMC Usage Count" 
+                    type="count"
+                  />
+                )}
+              </div>
+              
+              <div 
+                className={`bg-white p-4 rounded-lg shadow hover:shadow-lg transition-all duration-200 cursor-pointer relative ${hoveredCard === 'mostSso' ? 'z-[90]' : 'z-10'}`}
+                style={{ zIndex: hoveredCard === 'mostSso' ? 9998 : 10 }}
+                onMouseEnter={() => setHoveredCard('mostSso')}
+                onMouseLeave={() => setHoveredCard(null)}
+              >
+                <div className="flex flex-col items-center text-center">
+                  <Shield className="text-orange-600 mb-2" size={20} />
+                  <h3 className="text-xs font-medium text-gray-500 mb-1">Most Integrated SSO</h3>
+                  <p className="text-sm font-bold text-gray-900">{mostIntegratedSSO}</p>
+                </div>
+                {hoveredCard === 'mostSso' && ssoChartData.length > 0 && (
+                  <HoverTooltip 
+                    data={ssoChartData} 
+                    title="SSO Usage Count" 
+                    type="count"
+                  />
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="bg-white p-6 rounded-lg shadow">
+                <h3 className="text-lg font-semibold mb-4">Recent Activity</h3>
+                <div className="space-y-3">
+                  {auditLog.slice(0, 5).map((log, index) => (
+                    <div key={index} className="flex justify-between items-center p-2 bg-gray-50 rounded">
+                      <div>
+                        <p className="font-medium text-sm">{log.action}</p>
+                        <p className="text-xs text-gray-500">{new Date(log.created_at).toLocaleDateString()}</p>
+                      </div>
+                      <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                        {clients.find(c => c.id === log.client_id)?.name || 'Unknown'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="bg-white p-6 rounded-lg shadow">
+                <h3 className="text-lg font-semibold mb-4">Status Distribution</h3>
+                <div className="space-y-2">
+                  {Object.entries(statusBreakdown).map(([status, count]) => (
+                    <div key={status} className="flex justify-between items-center">
+                      <span className="text-sm">{status}</span>
+                      <span className="text-sm font-medium">{count}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'clients' && (
+          <div className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-xl font-semibold text-gray-900">Client Management</h2>
+              <button
+                onClick={() => {
+                  console.log('🔄 Add Client button clicked');
+                  setSelectedClient(null);
+                  setIsEditing(true);
+                }}
+                className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors flex items-center gap-2"
+              >
+                <Plus size={18} />
+                Add Client
+              </button>
+            </div>
+
+            <div className="bg-white rounded-lg shadow">
+              <div className="p-6 border-b border-gray-200">
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <div className="flex-1">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+                      <input
+                        type="text"
+                        placeholder="Search clients..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <select
+                      value={sortField}
+                      onChange={(e) => setSortField(e.target.value)}
+                      className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="name">Name</option>
+                      <option value="status">Status</option>
+                      <option value="updated_at">Last Updated</option>
+                    </select>
+                    <button
+                      onClick={() => setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')}
+                      className="px-3 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
+                    >
+                      {sortDirection === 'asc' ? '↑' : '↓'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto max-h-96 overflow-y-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Client</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SSO Systems</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">TMCs</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Updated</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {filteredClients.map((client) => (
+                      <tr key={client.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-medium text-gray-900">{client.name}</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                            client.status === 'Active' ? 'bg-green-100 text-green-800' :
+                            client.status === 'In Progress' ? 'bg-yellow-100 text-yellow-800' :
+                            client.status === 'Completed' ? 'bg-blue-100 text-blue-800' :
+                            'bg-gray-100 text-gray-800'
+                          }`}>
+                            {client.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-900">
+                            {(client.sso_systems || []).map(sso => sso.value).join(', ')}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-900">
+                            {(client.tmcs || []).map(tmc => tmc.value).join(', ')}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {new Date(client.updated_at).toLocaleDateString()}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => setSelectedClient(client)}
+                              className="text-blue-600 hover:text-blue-900"
+                            >
+                              <Eye size={16} />
+                            </button>
+                            <button
+                              onClick={() => {
+                                setSelectedClient(client);
+                                setIsEditing(true);
+                              }}
+                              className="text-indigo-600 hover:text-indigo-900"
+                            >
+                              <Edit3 size={16} />
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (confirm('Are you sure you want to delete this client?')) {
+                                  deleteClient(client.id);
+                                }
+                              }}
+                              className="text-red-600 hover:text-red-900"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Modals */}
+      {isEditing && (
+        <ClientForm
+          client={selectedClient}
+          onSave={() => {
+            setIsEditing(false);
+            setSelectedClient(null);
+          }}
+          onCancel={() => {
+            setIsEditing(false);
+            setSelectedClient(null);
+          }}
+        />
+      )}
+
+      {selectedClient && !isEditing && (
+        <ClientDetails
+          client={selectedClient}
+          onClose={() => setSelectedClient(null)}
+          onEdit={() => setIsEditing(true)}
+        />
+      )}
+
+      {showAuditLog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-white rounded-lg p-6 max-w-4xl w-full my-8 max-h-screen overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold">Audit Log</h2>
+              <button
+                onClick={() => setShowAuditLog(false)}
+                className="px-3 py-1 bg-gray-200 text-gray-600 rounded-md hover:bg-gray-300 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+            
+            <div className="space-y-3">
+              {auditLog.map((log, index) => (
+                <div key={index} className="bg-gray-50 p-4 rounded-lg">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h3 className="font-medium">{log.action}</h3>
+                      <p className="text-sm text-gray-600">Field: {log.field_name}</p>
+                      {log.old_value && <p className="text-sm text-gray-500">Old: {log.old_value}</p>}
+                      <p className="text-sm text-gray-700">New: {log.new_value}</p>
+                      <p className="text-sm text-gray-500">Client: {clients.find(c => c.id === log.client_id)?.name || 'Unknown'}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm text-gray-500">{new Date(log.created_at).toLocaleString()}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default ProductionCRM;
