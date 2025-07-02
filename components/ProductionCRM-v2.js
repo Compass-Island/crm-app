@@ -196,6 +196,7 @@ const ProductionCRM = () => {
         return;
       }
 
+      // Load ALL clients for ALL users - no user filtering
       const { data, error } = await Promise.race([
         supabase.from('clients').select('*').order('created_at', { ascending: false }),
         new Promise((_, reject) => 
@@ -225,6 +226,7 @@ const ProductionCRM = () => {
         return;
       }
 
+      // Load ALL audit logs for ALL users - no user filtering
       const { data, error } = await Promise.race([
         supabase.from('audit_log').select('*').order('created_at', { ascending: false }),
         new Promise((_, reject) => 
@@ -265,7 +267,7 @@ const ProductionCRM = () => {
         tmcs: clientData.tmcs || [],
         notes: clientData.notes || '',
         comments: clientData.comments || '',
-        user_id: user.id
+        user_id: user.id // Keep for audit purposes, but doesn't restrict access
       };
 
       let result;
