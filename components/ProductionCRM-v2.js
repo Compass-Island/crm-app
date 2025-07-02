@@ -1,4 +1,81 @@
-import React, { useState, useEffect } from 'react';
+<div className="overflow-x-auto" style={{ height: 'calc(100vh - 400px)', minHeight: '400px' }}>
+                <table className="w-full">
+                  <thead className="bg-gray-700 sticky top-0">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Client</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Status</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">SSO Systems</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">TMCs</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Last Updated</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-gray-800 divide-y divide-gray-700">
+                    {filteredClients.map((client) => (
+                      <tr key={client.id} className="hover:bg-gray-700">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-medium text-gray-100">{client.name}</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                            client.status === 'Active' ? 'bg-green-800 text-green-200' :
+                            client.status === 'In Progress' ? 'bg-yellow-800 text-yellow-200' :
+                            client.status === 'Completed' ? 'bg-blue-800 text-blue-200' :
+                            'bg-gray-600 text-gray-200'
+                          }`}>
+                            {client.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-300">
+                            {(client.sso_systems || []).map(sso => sso.value).join(', ')}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-300">
+                            {(client.tmcs || []).map(tmc => tmc.value).join(', ')}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
+                          {new Date(client.updated_at).toLocaleDateString()}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => setSelectedClient(client)}
+                              className="text-gray-400 hover:text-gray-200"
+                            >
+                              <Eye size={16} />
+                            </button>
+                            <button
+                              onClick={() => {
+                                setSelectedClient(client);
+                                setIsEditing(true);
+                              }}
+                              className="text-gray-400 hover:text-gray-200"
+                            >
+                              <Edit3 size={16} />
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (confirm('Are you sure you want to delete this client?')) {
+                                  deleteClient(client.id);
+                                }
+                              }}
+                              className="text-red-400 hover:text-red-300"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}import React, { useState, useEffect } from 'react';
 import { Search, Plus, Edit3, Trash2, Eye, BarChart3, Users, Building, Shield, History, LogOut } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import { createClient } from '@supabase/supabase-js';
@@ -412,42 +489,62 @@ const ProductionCRM = () => {
     value: count
   }));
 
-  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D', '#FFC658', '#FF7C7C'];
+  const COLORS = ['#6b7280', '#9ca3af', '#d1d5db', '#4b5563', '#374151', '#1f2937', '#111827', '#f9fafb'];
 
   const HoverTooltip = ({ data, title, type }) => {
     return (
-      <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-xl p-4 z-[100]">
-        <h4 className="font-semibold text-gray-800 mb-3 text-center">{title}</h4>
+      <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 w-96 bg-gray-800 border border-gray-600 rounded-lg shadow-xl p-6 z-[100]">
+        <h4 className="font-semibold text-gray-200 mb-4 text-center">{title}</h4>
         {type === 'count' ? (
-          <div className="space-y-2">
+          <div className="space-y-3">
             {data.map((item, index) => (
               <div key={index} className="flex justify-between items-center">
-                <span className="text-sm text-gray-600">{item.name}</span>
-                <span className="font-medium">{item.value}</span>
+                <span className="text-sm text-gray-300">{item.name}</span>
+                <span className="font-medium text-gray-100">{item.value}</span>
               </div>
             ))}
           </div>
         ) : (
           data.length > 0 && (
-            <ResponsiveContainer width="100%" height={200}>
-              <PieChart>
-                <Pie
-                  data={data}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={40}
-                  outerRadius={80}
-                  paddingAngle={2}
-                  dataKey="value"
-                >
-                  {data.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
+            <div className="space-y-4">
+              <ResponsiveContainer width="100%" height={280}>
+                <PieChart>
+                  <Pie
+                    data={data}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={50}
+                    outerRadius={100}
+                    paddingAngle={2}
+                    dataKey="value"
+                  >
+                    {data.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip 
+                    contentStyle={{
+                      backgroundColor: '#374151',
+                      border: '1px solid #4b5563',
+                      borderRadius: '6px',
+                      color: '#f3f4f6'
+                    }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="grid grid-cols-2 gap-2">
+                {data.map((entry, index) => (
+                  <div key={index} className="flex items-center gap-2">
+                    <div 
+                      className="w-3 h-3 rounded-full" 
+                      style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                    ></div>
+                    <span className="text-xs text-gray-300 truncate">{entry.name}</span>
+                    <span className="text-xs font-medium text-gray-100">{entry.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           )
         )}
       </div>
@@ -499,14 +596,14 @@ const ProductionCRM = () => {
 
     return (
       <div className="space-y-2">
-        <div className="flex flex-wrap gap-2 p-2 border border-gray-300 rounded-md min-h-[40px] bg-white">
+        <div className="flex flex-wrap gap-2 p-2 border border-gray-600 rounded-md min-h-[40px] bg-gray-700">
           {tags.map((tag, index) => (
-            <div key={index} className="flex items-center bg-blue-100 text-blue-800 px-2 py-1 rounded-md text-sm">
+            <div key={index} className="flex items-center bg-gray-600 text-gray-200 px-2 py-1 rounded-md text-sm">
               <span>{tag.value}</span>
               <button
                 type="button"
                 onClick={() => removeTag(index)}
-                className="ml-1 text-blue-600 hover:text-blue-800"
+                className="ml-1 text-gray-300 hover:text-gray-100"
               >
                 <Trash2 size={12} />
               </button>
@@ -518,18 +615,18 @@ const ProductionCRM = () => {
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={placeholder}
-            className="flex-1 min-w-[120px] outline-none"
+            className="flex-1 min-w-[120px] outline-none bg-transparent text-gray-100 placeholder-gray-400"
           />
         </div>
         {tags.map((tag, index) => (
           <div key={index} className="flex items-center gap-2 text-sm">
-            <span className="font-medium text-gray-700">{tag.value}:</span>
+            <span className="font-medium text-gray-300">{tag.value}:</span>
             <input
               type="text"
               value={tag.comment}
               onChange={(e) => updateTagComment(index, e.target.value)}
               placeholder="Add comment..."
-              className="flex-1 px-2 py-1 border border-gray-200 rounded text-sm"
+              className="flex-1 px-2 py-1 border border-gray-600 rounded text-sm bg-gray-700 text-gray-100 placeholder-gray-400"
             />
           </div>
         ))}
@@ -583,28 +680,28 @@ const ProductionCRM = () => {
 
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
-        <div className="bg-white rounded-lg p-6 max-w-4xl w-full my-8 max-h-screen overflow-y-auto">
-          <h2 className="text-2xl font-bold mb-6">{client ? 'Edit Client' : 'Add New Client'}</h2>
+        <div className="bg-gray-800 rounded-lg p-6 max-w-4xl w-full my-8 max-h-screen overflow-y-auto border border-gray-700">
+          <h2 className="text-2xl font-bold mb-6 text-gray-100">{client ? 'Edit Client' : 'Add New Client'}</h2>
           
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Client Name</label>
+                <label className="block text-sm font-medium text-gray-300 mb-1">Client Name</label>
                 <input
                   type="text"
                   value={formData.name}
                   onChange={(e) => setFormData({...formData, name: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-500 bg-gray-700 text-gray-100 placeholder-gray-400"
                   required
                 />
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                <label className="block text-sm font-medium text-gray-300 mb-1">Status</label>
                 <select
                   value={formData.status}
                   onChange={(e) => setFormData({...formData, status: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-500 bg-gray-700 text-gray-100"
                 >
                   <option value="In Progress">In Progress</option>
                   <option value="Active">Active</option>
@@ -615,7 +712,7 @@ const ProductionCRM = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">SSO Systems</label>
+              <label className="block text-sm font-medium text-gray-300 mb-1">SSO Systems</label>
               <TagInput
                 tags={formData.sso_systems}
                 onTagsChange={(tags) => setFormData({...formData, sso_systems: tags})}
@@ -624,7 +721,7 @@ const ProductionCRM = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">HR Integrations</label>
+              <label className="block text-sm font-medium text-gray-300 mb-1">HR Integrations</label>
               <TagInput
                 tags={formData.hr_integrations}
                 onTagsChange={(tags) => setFormData({...formData, hr_integrations: tags})}
@@ -633,7 +730,7 @@ const ProductionCRM = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Tenants</label>
+              <label className="block text-sm font-medium text-gray-300 mb-1">Tenants</label>
               <TagInput
                 tags={formData.tenants}
                 onTagsChange={(tags) => setFormData({...formData, tenants: tags})}
@@ -642,7 +739,7 @@ const ProductionCRM = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">TMCs</label>
+              <label className="block text-sm font-medium text-gray-300 mb-1">TMCs</label>
               <TagInput
                 tags={formData.tmcs}
                 onTagsChange={(tags) => setFormData({...formData, tmcs: tags})}
@@ -651,23 +748,23 @@ const ProductionCRM = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+              <label className="block text-sm font-medium text-gray-300 mb-1">Notes</label>
               <textarea
                 value={formData.notes}
                 onChange={(e) => setFormData({...formData, notes: e.target.value})}
                 rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-500 bg-gray-700 text-gray-100 placeholder-gray-400"
                 placeholder="General notes about this client..."
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Comments</label>
+              <label className="block text-sm font-medium text-gray-300 mb-1">Comments</label>
               <textarea
                 value={formData.comments}
                 onChange={(e) => setFormData({...formData, comments: e.target.value})}
                 rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-500 bg-gray-700 text-gray-100 placeholder-gray-400"
                 placeholder="Overall comments..."
               />
             </div>
@@ -676,13 +773,13 @@ const ProductionCRM = () => {
               <button
                 type="button"
                 onClick={onCancel}
-                className="px-4 py-2 text-gray-600 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors"
+                className="px-4 py-2 text-gray-300 bg-gray-600 rounded-md hover:bg-gray-500 transition-colors"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-500 transition-colors"
               >
                 {client ? 'Update Client' : 'Add Client'}
               </button>
@@ -698,20 +795,20 @@ const ProductionCRM = () => {
     
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
-        <div className="bg-white rounded-lg p-6 max-w-4xl w-full my-8 max-h-screen overflow-y-auto">
+        <div className="bg-gray-800 rounded-lg p-6 max-w-4xl w-full my-8 max-h-screen overflow-y-auto border border-gray-700">
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold">{client.name}</h2>
+            <h2 className="text-2xl font-bold text-gray-100">{client.name}</h2>
             <div className="flex space-x-2">
               <button
                 onClick={onEdit}
-                className="px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center gap-1"
+                className="px-3 py-1 bg-gray-600 text-white rounded-md hover:bg-gray-500 transition-colors flex items-center gap-1"
               >
                 <Edit3 size={14} />
                 Edit
               </button>
               <button
                 onClick={onClose}
-                className="px-3 py-1 bg-gray-200 text-gray-600 rounded-md hover:bg-gray-300 transition-colors"
+                className="px-3 py-1 bg-gray-600 text-gray-200 rounded-md hover:bg-gray-500 transition-colors"
               >
                 Close
               </button>
@@ -720,75 +817,116 @@ const ProductionCRM = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             <div>
-              <h3 className="font-semibold text-gray-700 mb-2">Status</h3>
+              <h3 className="font-semibold text-gray-300 mb-2">Status</h3>
               <span className={`px-2 py-1 rounded-full text-sm ${
-                client.status === 'Active' ? 'bg-green-100 text-green-800' :
-                client.status === 'In Progress' ? 'bg-yellow-100 text-yellow-800' :
-                client.status === 'Completed' ? 'bg-blue-100 text-blue-800' :
-                'bg-gray-100 text-gray-800'
+                client.status === 'Active' ? 'bg-green-800 text-green-200' :
+                client.status === 'In Progress' ? 'bg-yellow-800 text-yellow-200' :
+                client.status === 'Completed' ? 'bg-blue-800 text-blue-200' :
+                'bg-gray-600 text-gray-200'
               }`}>
                 {client.status}
               </span>
             </div>
             
             <div>
-              <h3 className="font-semibold text-gray-700 mb-2">Last Updated</h3>
-              <p className="text-gray-600">{new Date(client.updated_at).toLocaleDateString()}</p>
+              <h3 className="font-semibold text-gray-300 mb-2">Last Updated</h3>
+              <p className="text-gray-400">{new Date(client.updated_at).toLocaleDateString()}</p>
             </div>
           </div>
 
           <div className="space-y-6">
             <div>
-              <h3 className="font-semibold text-gray-700 mb-2">SSO Systems</h3>
+              <h3 className="font-semibold text-gray-300 mb-2">SSO Systems</h3>
               <div className="space-y-2">
                 {(client.sso_systems || []).map((sso, index) => (
-                  <div key={index} className="bg-gray-50 p-2 rounded">
-                    <span className="font-medium">{sso.value}</span>
-                    {sso.comment && <p className="text-sm text-gray-600">{sso.comment}</p>}
+                  <div key={index} className="bg-gray-700 p-2 rounded">
+                    <span className="font-medium text-gray-200">{sso.value}</span>
+                    {sso.comment && <p className="text-sm text-gray-400">{sso.comment}</p>}
                   </div>
                 ))}
               </div>
             </div>
 
             <div>
-              <h3 className="font-semibold text-gray-700 mb-2">HR Integrations</h3>
+              <h3 className="font-semibold text-gray-300 mb-2">HR Integrations</h3>
               <div className="space-y-2">
                 {(client.hr_integrations || []).map((hr, index) => (
-                  <div key={index} className="bg-gray-50 p-2 rounded">
-                    <span className="font-medium">{hr.value}</span>
-                    {hr.comment && <p className="text-sm text-gray-600">{hr.comment}</p>}
+                  <div key={index} className="bg-gray-700 p-2 rounded">
+                    <span className="font-medium text-gray-200">{hr.value}</span>
+                    {hr.comment && <p className="text-sm text-gray-400">{hr.comment}</p>}
                   </div>
                 ))}
               </div>
             </div>
 
             <div>
-              <h3 className="font-semibold text-gray-700 mb-2">Tenants</h3>
+              <h3 className="font-semibold text-gray-300 mb-2">Tenants</h3>
               <div className="space-y-2">
                 {(client.tenants || []).map((tenant, index) => (
-                  <div key={index} className="bg-gray-50 p-2 rounded">
-                    <span className="font-medium">{tenant.value}</span>
-                    {tenant.comment && <p className="text-sm text-gray-600">{tenant.comment}</p>}
+                  <div key={index} className="bg-gray-700 p-2 rounded">
+                    <span className="font-medium text-gray-200">{tenant.value}</span>
+                    {tenant.comment && <p className="text-sm text-gray-400">{tenant.comment}</p>}
                   </div>
                 ))}
               </div>
             </div>
 
             <div>
-              <h3 className="font-semibold text-gray-700 mb-2">TMCs</h3>
+              <h3 className="font-semibold text-gray-300 mb-2">TMCs</h3>
               <div className="space-y-2">
                 {(client.tmcs || []).map((tmc, index) => (
-                  <div key={index} className="bg-gray-50 p-2 rounded">
-                    <span className="font-medium">{tmc.value}</span>
-                    {tmc.comment && <p className="text-sm text-gray-600">{tmc.comment}</p>}
+                  <div key={index} className="bg-gray-700 p-2 rounded">
+                    <span className="font-medium text-gray-200">{tmc.value}</span>
+                    {tmc.comment && <p className="text-sm text-gray-400">{tmc.comment}</p>}
                   </div>
                 ))}
               </div>
             </div>
 
             <div>
-              <h3 className="font-semibold text-gray-700 mb-2">Notes</h3>
-              <p className="text-gray-600 bg-gray-50 p-3 rounded">{client.notes}</p>
+              <h3 className="font-semibold text-gray-300 mb-2">Notes</h3>
+              <p className="text-gray-400 bg-gray-700 p-3 rounded">{client.notes}</p>
+            </div>
+
+            <div>
+              <h3 className="font-semibold text-gray-300 mb-2">Comments</h3>
+              <p className="text-gray-400 bg-gray-700 p-3 rounded">{client.comments}</p>
+            </div>
+
+            <div>
+              <h3 className="font-semibold text-gray-300 mb-2 flex items-center gap-2">
+                <History size={16} />
+                Audit Log for this Client
+              </h3>
+              <div className="space-y-2 max-h-60 overflow-y-auto bg-gray-700 p-3 rounded">
+                {clientAuditLog.length > 0 ? clientAuditLog.map((log, index) => (
+                  <div key={index} className="bg-gray-600 p-3 rounded text-sm border-l-4 border-gray-500">
+                    <div className="flex justify-between items-start mb-1">
+                      <span className="font-medium text-gray-200">{log.action}</span>
+                      <span className="text-gray-400 text-xs">{new Date(log.created_at).toLocaleString()}</span>
+                    </div>
+                    <div className="text-gray-300">
+                      <span className="font-medium">Field:</span> {log.field_name}
+                    </div>
+                    {log.old_value && (
+                      <div className="text-gray-400 text-xs">
+                        <span className="font-medium">Previous:</span> {log.old_value}
+                      </div>
+                    )}
+                    <div className="text-gray-200 text-xs">
+                      <span className="font-medium">New:</span> {log.new_value}
+                    </div>
+                  </div>
+                )) : (
+                  <p className="text-gray-400 text-center py-4">No changes recorded for this client yet.</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };<p className="text-gray-600 bg-gray-50 p-3 rounded">{client.notes}</p>
             </div>
 
             <div>
@@ -834,13 +972,13 @@ const ProductionCRM = () => {
   // Loading state with timeout
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <div className="text-center">
-          <div className="text-xl mb-4">Loading CI360 CRM...</div>
+          <div className="text-xl mb-4 text-gray-100">Loading CI360 CRM...</div>
           {error && (
-            <div className="text-red-600 text-sm mb-4">{error}</div>
+            <div className="text-red-400 text-sm mb-4">{error}</div>
           )}
-          <div className="text-gray-500 text-sm">
+          <div className="text-gray-400 text-sm">
             If this takes more than 10 seconds, please refresh the page
           </div>
         </div>
@@ -851,47 +989,47 @@ const ProductionCRM = () => {
   // Login screen
   if (!user) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
-          <h1 className="text-2xl font-bold text-center mb-6">CI360 Client CRM</h1>
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <div className="bg-gray-800 p-8 rounded-lg shadow-md w-full max-w-md border border-gray-700">
+          <h1 className="text-2xl font-bold text-center mb-6 text-gray-100">CI360 Client CRM</h1>
           
           {error && (
-            <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+            <div className="mb-4 p-3 bg-red-900 border border-red-700 text-red-200 rounded">
               <p className="text-sm">{error}</p>
             </div>
           )}
 
           {(!SUPABASE_URL || !SUPABASE_ANON_KEY) && (
-            <div className="mb-4 p-3 bg-yellow-100 border border-yellow-400 text-yellow-700 rounded">
+            <div className="mb-4 p-3 bg-yellow-900 border border-yellow-700 text-yellow-200 rounded">
               <p className="text-sm">⚠️ Configuration issue detected</p>
             </div>
           )}
           
           <form onSubmit={signIn} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+              <label className="block text-sm font-medium text-gray-300 mb-1">Email</label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-500 bg-gray-700 text-gray-100 placeholder-gray-400"
                 required
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+              <label className="block text-sm font-medium text-gray-300 mb-1">Password</label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-500 bg-gray-700 text-gray-100 placeholder-gray-400"
                 required
               />
             </div>
             <button
               type="submit"
               disabled={authLoading}
-              className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors"
+              className="w-full bg-gray-600 text-white py-2 px-4 rounded-md hover:bg-gray-500 disabled:opacity-50 transition-colors"
             >
               {authLoading ? 'Signing in...' : 'Sign In'}
             </button>
@@ -903,9 +1041,9 @@ const ProductionCRM = () => {
 
   // Main app
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-900">
       {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 text-sm">
+        <div className="bg-red-900 border border-red-700 text-red-200 px-4 py-3 text-sm">
           {error} 
           <button 
             onClick={() => setError(null)} 
@@ -916,37 +1054,37 @@ const ProductionCRM = () => {
         </div>
       )}
 
-      <div className="bg-white shadow-sm border-b">
+      <div className="bg-gray-800 shadow-sm border-b border-gray-700">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
-            <h1 className="text-2xl font-bold text-gray-900">CI360 Client CRM</h1>
+            <h1 className="text-2xl font-bold text-gray-100">CI360 Client CRM</h1>
             <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-600">Welcome, {user.email}</span>
+              <span className="text-sm text-gray-300">Welcome, {user.email}</span>
               <div className="flex space-x-2">
                 <button
                   onClick={() => setActiveTab('dashboard')}
-                  className={`px-4 py-2 rounded-md ${activeTab === 'dashboard' ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}
+                  className={`px-4 py-2 rounded-md ${activeTab === 'dashboard' ? 'bg-gray-600 text-white' : 'text-gray-300 hover:bg-gray-700'}`}
                 >
                   <BarChart3 size={18} className="inline mr-2" />
                   Dashboard
                 </button>
                 <button
                   onClick={() => setActiveTab('clients')}
-                  className={`px-4 py-2 rounded-md ${activeTab === 'clients' ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}
+                  className={`px-4 py-2 rounded-md ${activeTab === 'clients' ? 'bg-gray-600 text-white' : 'text-gray-300 hover:bg-gray-700'}`}
                 >
                   <Users size={18} className="inline mr-2" />
                   Clients
                 </button>
                 <button
                   onClick={() => setShowAuditLog(true)}
-                  className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-md"
+                  className="px-4 py-2 text-gray-300 hover:bg-gray-700 rounded-md"
                 >
                   <History size={18} className="inline mr-2" />
                   Audit Log
                 </button>
                 <button
                   onClick={signOut}
-                  className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-md"
+                  className="px-4 py-2 text-red-400 hover:bg-red-900 rounded-md"
                 >
                   <LogOut size={18} className="inline mr-2" />
                   Sign Out
@@ -960,19 +1098,19 @@ const ProductionCRM = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {activeTab === 'dashboard' && (
           <div className="space-y-6">
-            <h2 className="text-xl font-semibold text-gray-900">Dashboard Overview</h2>
+            <h2 className="text-xl font-semibold text-gray-100">Dashboard Overview</h2>
             
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
               <div 
-                className={`bg-white p-4 rounded-lg shadow hover:shadow-lg transition-all duration-200 cursor-pointer relative ${hoveredCard === 'onboardings' ? 'z-[90]' : 'z-10'}`}
+                className={`bg-gray-800 p-4 rounded-lg shadow hover:shadow-lg transition-all duration-200 cursor-pointer relative ${hoveredCard === 'onboardings' ? 'z-[90]' : 'z-10'}`}
                 style={{ zIndex: hoveredCard === 'onboardings' ? 9998 : 10 }}
                 onMouseEnter={() => setHoveredCard('onboardings')}
                 onMouseLeave={() => setHoveredCard(null)}
               >
                 <div className="flex flex-col items-center text-center">
-                  <Users className="text-blue-600 mb-2" size={20} />
-                  <h3 className="text-xs font-medium text-gray-500 mb-1">Total Onboardings</h3>
-                  <p className="text-xl font-bold text-gray-900">{totalOnboardings}</p>
+                  <Users className="text-gray-400 mb-2" size={20} />
+                  <h3 className="text-xs font-medium text-gray-400 mb-1">Total Onboardings</h3>
+                  <p className="text-xl font-bold text-gray-100">{totalOnboardings}</p>
                 </div>
                 {hoveredCard === 'onboardings' && statusChartData.length > 0 && (
                   <HoverTooltip 
@@ -984,15 +1122,15 @@ const ProductionCRM = () => {
               </div>
               
               <div 
-                className={`bg-white p-4 rounded-lg shadow hover:shadow-lg transition-all duration-200 cursor-pointer relative ${hoveredCard === 'tmcs' ? 'z-[90]' : 'z-10'}`}
+                className={`bg-gray-800 p-4 rounded-lg shadow hover:shadow-lg transition-all duration-200 cursor-pointer relative ${hoveredCard === 'tmcs' ? 'z-[90]' : 'z-10'}`}
                 style={{ zIndex: hoveredCard === 'tmcs' ? 9998 : 10 }}
                 onMouseEnter={() => setHoveredCard('tmcs')}
                 onMouseLeave={() => setHoveredCard(null)}
               >
                 <div className="flex flex-col items-center text-center">
-                  <Building className="text-green-600 mb-2" size={20} />
-                  <h3 className="text-xs font-medium text-gray-500 mb-1">Total TMCs</h3>
-                  <p className="text-xl font-bold text-gray-900">{totalTMCs}</p>
+                  <Building className="text-gray-400 mb-2" size={20} />
+                  <h3 className="text-xs font-medium text-gray-400 mb-1">Total TMCs</h3>
+                  <p className="text-xl font-bold text-gray-100">{totalTMCs}</p>
                 </div>
                 {hoveredCard === 'tmcs' && tmcChartData.length > 0 && (
                   <HoverTooltip 
@@ -1004,15 +1142,15 @@ const ProductionCRM = () => {
               </div>
 
               <div 
-                className={`bg-white p-4 rounded-lg shadow hover:shadow-lg transition-all duration-200 cursor-pointer relative ${hoveredCard === 'ssos' ? 'z-[90]' : 'z-10'}`}
+                className={`bg-gray-800 p-4 rounded-lg shadow hover:shadow-lg transition-all duration-200 cursor-pointer relative ${hoveredCard === 'ssos' ? 'z-[90]' : 'z-10'}`}
                 style={{ zIndex: hoveredCard === 'ssos' ? 9998 : 10 }}
                 onMouseEnter={() => setHoveredCard('ssos')}
                 onMouseLeave={() => setHoveredCard(null)}
               >
                 <div className="flex flex-col items-center text-center">
-                  <Shield className="text-purple-600 mb-2" size={20} />
-                  <h3 className="text-xs font-medium text-gray-500 mb-1">Total SSOs</h3>
-                  <p className="text-xl font-bold text-gray-900">{totalSSOs}</p>
+                  <Shield className="text-gray-400 mb-2" size={20} />
+                  <h3 className="text-xs font-medium text-gray-400 mb-1">Total SSOs</h3>
+                  <p className="text-xl font-bold text-gray-100">{totalSSOs}</p>
                 </div>
                 {hoveredCard === 'ssos' && ssoChartData.length > 0 && (
                   <HoverTooltip 
@@ -1024,15 +1162,15 @@ const ProductionCRM = () => {
               </div>
               
               <div 
-                className={`bg-white p-4 rounded-lg shadow hover:shadow-lg transition-all duration-200 cursor-pointer relative ${hoveredCard === 'mostTmc' ? 'z-[90]' : 'z-10'}`}
+                className={`bg-gray-800 p-4 rounded-lg shadow hover:shadow-lg transition-all duration-200 cursor-pointer relative ${hoveredCard === 'mostTmc' ? 'z-[90]' : 'z-10'}`}
                 style={{ zIndex: hoveredCard === 'mostTmc' ? 9998 : 10 }}
                 onMouseEnter={() => setHoveredCard('mostTmc')}
                 onMouseLeave={() => setHoveredCard(null)}
               >
                 <div className="flex flex-col items-center text-center">
-                  <Building className="text-indigo-600 mb-2" size={20} />
-                  <h3 className="text-xs font-medium text-gray-500 mb-1">Most Integrated TMC</h3>
-                  <p className="text-sm font-bold text-gray-900">{mostIntegratedTMC}</p>
+                  <Building className="text-gray-400 mb-2" size={20} />
+                  <h3 className="text-xs font-medium text-gray-400 mb-1">Most Integrated TMC</h3>
+                  <p className="text-sm font-bold text-gray-100">{mostIntegratedTMC}</p>
                 </div>
                 {hoveredCard === 'mostTmc' && tmcChartData.length > 0 && (
                   <HoverTooltip 
@@ -1044,15 +1182,15 @@ const ProductionCRM = () => {
               </div>
               
               <div 
-                className={`bg-white p-4 rounded-lg shadow hover:shadow-lg transition-all duration-200 cursor-pointer relative ${hoveredCard === 'mostSso' ? 'z-[90]' : 'z-10'}`}
+                className={`bg-gray-800 p-4 rounded-lg shadow hover:shadow-lg transition-all duration-200 cursor-pointer relative ${hoveredCard === 'mostSso' ? 'z-[90]' : 'z-10'}`}
                 style={{ zIndex: hoveredCard === 'mostSso' ? 9998 : 10 }}
                 onMouseEnter={() => setHoveredCard('mostSso')}
                 onMouseLeave={() => setHoveredCard(null)}
               >
                 <div className="flex flex-col items-center text-center">
-                  <Shield className="text-orange-600 mb-2" size={20} />
-                  <h3 className="text-xs font-medium text-gray-500 mb-1">Most Integrated SSO</h3>
-                  <p className="text-sm font-bold text-gray-900">{mostIntegratedSSO}</p>
+                  <Shield className="text-gray-400 mb-2" size={20} />
+                  <h3 className="text-xs font-medium text-gray-400 mb-1">Most Integrated SSO</h3>
+                  <p className="text-sm font-bold text-gray-100">{mostIntegratedSSO}</p>
                 </div>
                 {hoveredCard === 'mostSso' && ssoChartData.length > 0 && (
                   <HoverTooltip 
@@ -1065,16 +1203,16 @@ const ProductionCRM = () => {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="bg-white p-6 rounded-lg shadow">
-                <h3 className="text-lg font-semibold mb-4">Recent Activity</h3>
+              <div className="bg-gray-800 p-6 rounded-lg shadow">
+                <h3 className="text-lg font-semibold mb-4 text-gray-100">Recent Activity</h3>
                 <div className="space-y-3">
                   {auditLog.slice(0, 5).map((log, index) => (
-                    <div key={index} className="flex justify-between items-center p-2 bg-gray-50 rounded">
+                    <div key={index} className="flex justify-between items-center p-2 bg-gray-700 rounded">
                       <div>
-                        <p className="font-medium text-sm">{log.action}</p>
-                        <p className="text-xs text-gray-500">{new Date(log.created_at).toLocaleDateString()}</p>
+                        <p className="font-medium text-sm text-gray-200">{log.action}</p>
+                        <p className="text-xs text-gray-400">{new Date(log.created_at).toLocaleDateString()}</p>
                       </div>
-                      <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                      <span className="text-xs bg-gray-600 text-gray-200 px-2 py-1 rounded">
                         {clients.find(c => c.id === log.client_id)?.name || 'Unknown'}
                       </span>
                     </div>
@@ -1082,13 +1220,13 @@ const ProductionCRM = () => {
                 </div>
               </div>
 
-              <div className="bg-white p-6 rounded-lg shadow">
-                <h3 className="text-lg font-semibold mb-4">Status Distribution</h3>
+              <div className="bg-gray-800 p-6 rounded-lg shadow">
+                <h3 className="text-lg font-semibold mb-4 text-gray-100">Status Distribution</h3>
                 <div className="space-y-2">
                   {Object.entries(statusBreakdown).map(([status, count]) => (
                     <div key={status} className="flex justify-between items-center">
-                      <span className="text-sm">{status}</span>
-                      <span className="text-sm font-medium">{count}</span>
+                      <span className="text-sm text-gray-300">{status}</span>
+                      <span className="text-sm font-medium text-gray-100">{count}</span>
                     </div>
                   ))}
                 </div>
@@ -1149,9 +1287,9 @@ const ProductionCRM = () => {
                 </div>
               </div>
 
-              <div className="overflow-x-auto max-h-96 overflow-y-auto">
+              <div className="overflow-x-auto" style={{ height: 'calc(100vh - 400px)', minHeight: '400px' }}>
                 <table className="w-full">
-                  <thead className="bg-gray-50">
+                  <thead className="bg-gray-50 sticky top-0">
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Client</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
@@ -1254,12 +1392,12 @@ const ProductionCRM = () => {
 
       {showAuditLog && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <div className="bg-white rounded-lg p-6 max-w-4xl w-full my-8 max-h-screen overflow-y-auto">
+          <div className="bg-gray-800 rounded-lg p-6 max-w-4xl w-full my-8 max-h-screen overflow-y-auto border border-gray-700">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold">Audit Log</h2>
+              <h2 className="text-2xl font-bold text-gray-100">Audit Log</h2>
               <button
                 onClick={() => setShowAuditLog(false)}
-                className="px-3 py-1 bg-gray-200 text-gray-600 rounded-md hover:bg-gray-300 transition-colors"
+                className="px-3 py-1 bg-gray-600 text-gray-200 rounded-md hover:bg-gray-500 transition-colors"
               >
                 Close
               </button>
@@ -1267,17 +1405,17 @@ const ProductionCRM = () => {
             
             <div className="space-y-3">
               {auditLog.map((log, index) => (
-                <div key={index} className="bg-gray-50 p-4 rounded-lg">
+                <div key={index} className="bg-gray-700 p-4 rounded-lg">
                   <div className="flex justify-between items-start">
                     <div>
-                      <h3 className="font-medium">{log.action}</h3>
-                      <p className="text-sm text-gray-600">Field: {log.field_name}</p>
-                      {log.old_value && <p className="text-sm text-gray-500">Old: {log.old_value}</p>}
-                      <p className="text-sm text-gray-700">New: {log.new_value}</p>
-                      <p className="text-sm text-gray-500">Client: {clients.find(c => c.id === log.client_id)?.name || 'Unknown'}</p>
+                      <h3 className="font-medium text-gray-100">{log.action}</h3>
+                      <p className="text-sm text-gray-300">Field: {log.field_name}</p>
+                      {log.old_value && <p className="text-sm text-gray-400">Old: {log.old_value}</p>}
+                      <p className="text-sm text-gray-200">New: {log.new_value}</p>
+                      <p className="text-sm text-gray-400">Client: {clients.find(c => c.id === log.client_id)?.name || 'Unknown'}</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-sm text-gray-500">{new Date(log.created_at).toLocaleString()}</p>
+                      <p className="text-sm text-gray-400">{new Date(log.created_at).toLocaleString()}</p>
                     </div>
                   </div>
                 </div>
