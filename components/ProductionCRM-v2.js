@@ -3,18 +3,26 @@ import { Search, Plus, Edit3, Trash2, Eye, BarChart3, Users, Building, Shield, H
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import { createClient } from '@supabase/supabase-js';
 
-// 🔥 REPLACE THESE WITH YOUR ACTUAL SUPABASE VALUES FROM STEP 5
-const SUPABASE_URL = 'https://lyjknyqycyvudhkgohqv.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx5amtueXF5Y3l2dWRoa2dvaHF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE0Njg0MDgsImV4cCI6MjA2NzA0NDQwOH0.Uu7pGeWUv9hrv2cS6dgZu5HumgvNFRDAosENf4tRzxw';
+// Bulletproof Supabase configuration with fallbacks
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://lyjknyqycyvudhkgohqv.supabase.co';
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx5amtueXF5Y3l2dWRoa2dvaHF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE0Njg0MDgsImV4cCI6MjA2NzA0NDQwOH0.Uu7pGeWUv9hrv2cS6dgZu5HumgvNFRDAosENf4tRzxw';
 
-console.log('CI360 CRM Loading - Supabase URL:', SUPABASE_URL);
-console.log('CI360 CRM Loading - Supabase Key exists:', !!SUPABASE_ANON_KEY);
+console.log('🚀 CI360 CRM Starting...');
+console.log('📍 Supabase URL:', SUPABASE_URL);
+console.log('🔑 Supabase Key exists:', !!SUPABASE_ANON_KEY);
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let supabase;
+try {
+  supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  console.log('✅ Supabase client created successfully');
+} catch (error) {
+  console.error('❌ Failed to create Supabase client:', error);
+}
 
 const ProductionCRM = () => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [clients, setClients] = useState([]);
   const [auditLog, setAuditLog] = useState([]);
@@ -32,91 +40,135 @@ const ProductionCRM = () => {
   const [authLoading, setAuthLoading] = useState(false);
 
   useEffect(() => {
-    console.log('CI360 CRM useEffect triggered');
-    checkUser();
+    console.log('🔄 Starting authentication check...');
     
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth state changed:', event, 'User ID:', session?.user?.id);
-      if (session?.user?.id) {
-        setUser(session.user);
-        await loadData();
-      } else {
-        setUser(null);
-        setClients([]);
-        setAuditLog([]);
-      }
+    // Set timeout to prevent infinite loading
+    const loadingTimeout = setTimeout(() => {
+      console.log('⏰ Loading timeout reached, forcing login screen');
+      setLoading(false);
+      setError('Connection timeout - please try logging in');
+    }, 10000); // 10 second timeout
+
+    checkUserWithFallback().finally(() => {
+      clearTimeout(loadingTimeout);
     });
 
-    return () => subscription.unsubscribe();
-  }, []);
-
-  const checkUser = async () => {
+    // Auth state listener with error handling
+    let subscription;
     try {
-      console.log('Checking current user...');
-      const { data: { session }, error } = await supabase.auth.getSession();
-      console.log('Current session:', session?.user?.id, 'Error:', error);
-      
-      if (error) {
-        console.error('Session error:', error);
-        throw error;
-      }
-      
-      if (session?.user?.id) {
-        console.log('Found existing session for user:', session.user.id);
-        setUser(session.user);
-        await loadData();
-      } else {
-        console.log('No existing session found');
+      if (supabase?.auth) {
+        const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
+          console.log('🔄 Auth state changed:', event, 'User:', session?.user?.id);
+          clearTimeout(loadingTimeout);
+          
+          if (session?.user?.id) {
+            setUser(session.user);
+            setError(null);
+            await loadDataSafely();
+          } else {
+            setUser(null);
+            setClients([]);
+            setAuditLog([]);
+          }
+          setLoading(false);
+        });
+        subscription = data.subscription;
       }
     } catch (error) {
-      console.error('Error checking user:', error);
+      console.error('❌ Auth listener setup failed:', error);
+      setLoading(false);
+    }
+
+    return () => {
+      clearTimeout(loadingTimeout);
+      subscription?.unsubscribe();
+    };
+  }, []);
+
+  const checkUserWithFallback = async () => {
+    try {
+      console.log('🔍 Checking current user session...');
+      
+      if (!supabase?.auth) {
+        throw new Error('Supabase client not available');
+      }
+
+      const { data: { session }, error } = await Promise.race([
+        supabase.auth.getSession(),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Session check timeout')), 8000)
+        )
+      ]);
+
+      if (error) {
+        console.error('❌ Session check error:', error);
+        throw error;
+      }
+
+      console.log('📋 Session check result:', session?.user?.id ? 'Found user' : 'No session');
+
+      if (session?.user?.id) {
+        setUser(session.user);
+        setError(null);
+        await loadDataSafely();
+      }
+    } catch (error) {
+      console.error('❌ User check failed:', error);
+      setError('Authentication check failed - please try logging in');
     } finally {
       setLoading(false);
     }
   };
 
-  const loadData = async () => {
-    console.log('Loading shared data for all users');
+  const loadDataSafely = async () => {
+    console.log('📊 Loading shared data...');
     try {
       await Promise.all([
-        loadClients(),
-        loadAuditLog()
+        loadClientsSafely(),
+        loadAuditLogSafely()
       ]);
-      console.log('Data loading completed');
+      console.log('✅ Data loading completed');
     } catch (error) {
-      console.error('Error loading data:', error);
+      console.error('❌ Data loading failed:', error);
     }
   };
 
   const signIn = async (e) => {
     e.preventDefault();
     setAuthLoading(true);
+    setError(null);
     
-    console.log('Attempting sign in for:', email);
+    console.log('🔐 Attempting sign in...');
     
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password: password,
-      });
+      if (!supabase?.auth) {
+        throw new Error('Supabase client not available');
+      }
 
-      console.log('Sign in response:', { data: data?.user?.id, error });
+      const { data, error } = await Promise.race([
+        supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password: password,
+        }),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Sign in timeout')), 10000)
+        )
+      ]);
 
       if (error) {
-        console.error('Sign in error:', error);
+        console.error('❌ Sign in error:', error);
         throw error;
       }
-      
+
       if (data?.user?.id) {
-        console.log('Sign in successful for user:', data.user.id);
-        // Don't manually set user here - let the auth state change handler do it
+        console.log('✅ Sign in successful:', data.user.id);
+        setError(null);
       } else {
         throw new Error('No user returned from sign in');
       }
     } catch (error) {
-      console.error('Sign in failed:', error);
-      alert('Error signing in: ' + error.message);
+      console.error('❌ Sign in failed:', error);
+      setError('Sign in failed: ' + error.message);
     } finally {
       setAuthLoading(false);
     }
@@ -124,71 +176,85 @@ const ProductionCRM = () => {
 
   const signOut = async () => {
     try {
-      console.log('Signing out user');
-      await supabase.auth.signOut();
+      console.log('🚪 Signing out...');
+      if (supabase?.auth) {
+        await supabase.auth.signOut();
+      }
       setUser(null);
       setClients([]);
       setAuditLog([]);
+      setError(null);
     } catch (error) {
-      console.error('Error signing out:', error);
+      console.error('❌ Sign out error:', error);
     }
   };
 
-  const loadClients = async () => {
+  const loadClientsSafely = async () => {
     try {
-      console.log('Loading all clients (shared view)');
-      const { data, error } = await supabase
-        .from('clients')
-        .select('*')
-        .order('created_at', { ascending: false });
+      if (!supabase?.from) {
+        console.log('⚠️ Supabase client not available for clients');
+        return;
+      }
+
+      const { data, error } = await Promise.race([
+        supabase.from('clients').select('*').order('created_at', { ascending: false }),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Clients query timeout')), 8000)
+        )
+      ]);
       
       if (error) {
-        console.error('Supabase error loading clients:', error);
-        throw error;
+        console.error('❌ Error loading clients:', error);
+        if (!error.message.includes('relation')) {
+          setError('Failed to load clients: ' + error.message);
+        }
+        return;
       }
       
-      console.log('Successfully loaded', data?.length || 0, 'clients');
+      console.log('✅ Loaded', data?.length || 0, 'clients');
       setClients(data || []);
     } catch (error) {
-      console.error('Error loading clients:', error);
-      if (!error.message.includes('relation') && !error.message.includes('does not exist')) {
-        alert('Error loading clients. Please check your database setup.');
-      }
+      console.error('❌ Clients loading failed:', error);
     }
   };
 
-  const loadAuditLog = async () => {
+  const loadAuditLogSafely = async () => {
     try {
-      console.log('Loading all audit logs (shared view)');
-      const { data, error } = await supabase
-        .from('audit_log')
-        .select('*')
-        .order('created_at', { ascending: false });
+      if (!supabase?.from) {
+        console.log('⚠️ Supabase client not available for audit log');
+        return;
+      }
+
+      const { data, error } = await Promise.race([
+        supabase.from('audit_log').select('*').order('created_at', { ascending: false }),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Audit log query timeout')), 8000)
+        )
+      ]);
       
       if (error) {
-        console.error('Supabase error loading audit log:', error);
-        throw error;
+        console.error('❌ Error loading audit log:', error);
+        if (!error.message.includes('relation')) {
+          setError('Failed to load audit log: ' + error.message);
+        }
+        return;
       }
       
-      console.log('Successfully loaded', data?.length || 0, 'audit log entries');
+      console.log('✅ Loaded', data?.length || 0, 'audit log entries');
       setAuditLog(data || []);
     } catch (error) {
-      console.error('Error loading audit log:', error);
-      if (!error.message.includes('relation') && !error.message.includes('does not exist')) {
-        alert('Error loading audit log. Please check your database setup.');
-      }
+      console.error('❌ Audit log loading failed:', error);
     }
   };
 
   const saveClient = async (clientData) => {
     if (!user?.id) {
-      console.error('Cannot save client: no authenticated user');
-      alert('User not authenticated');
+      setError('User not authenticated');
       return;
     }
     
     try {
-      console.log('Saving client:', clientData.name, 'by user:', user.email);
+      console.log('💾 Saving client:', clientData.name);
       
       const clientToSave = {
         name: clientData.name,
@@ -204,8 +270,6 @@ const ProductionCRM = () => {
 
       let result;
       if (clientData.id && clientData.id !== 'new') {
-        // Update existing client
-        console.log('Updating existing client:', clientData.id);
         result = await supabase
           .from('clients')
           .update({
@@ -214,8 +278,6 @@ const ProductionCRM = () => {
           })
           .eq('id', clientData.id);
       } else {
-        // Create new client
-        console.log('Creating new client');
         result = await supabase
           .from('clients')
           .insert([{
@@ -226,38 +288,31 @@ const ProductionCRM = () => {
       }
       
       if (result.error) {
-        console.error('Database error saving client:', result.error);
         throw result.error;
       }
       
-      console.log('Client saved successfully');
-      
-      // Reload clients
-      await loadClients();
+      console.log('✅ Client saved successfully');
+      await loadClientsSafely();
       
       // Add audit log entry
       try {
-        await supabase
-          .from('audit_log')
-          .insert([{
-            client_id: clientData.id === 'new' ? null : clientData.id,
-            action: clientData.id && clientData.id !== 'new' ? 'Client Updated' : 'Client Created',
-            field_name: 'All Fields',
-            old_value: '',
-            new_value: `Client: ${clientData.name} (by ${user.email})`,
-            user_id: user.id,
-            created_at: new Date().toISOString()
-          }]);
-        
-        await loadAuditLog();
-        console.log('Audit log entry created');
+        await supabase.from('audit_log').insert([{
+          client_id: clientData.id === 'new' ? null : clientData.id,
+          action: clientData.id && clientData.id !== 'new' ? 'Client Updated' : 'Client Created',
+          field_name: 'All Fields',
+          old_value: '',
+          new_value: `Client: ${clientData.name} (by ${user.email})`,
+          user_id: user.id,
+          created_at: new Date().toISOString()
+        }]);
+        await loadAuditLogSafely();
       } catch (auditError) {
-        console.log('Audit log failed (table might not exist):', auditError);
+        console.log('⚠️ Audit log failed:', auditError);
       }
       
     } catch (error) {
-      console.error('Error saving client:', error);
-      alert('Error saving client: ' + error.message);
+      console.error('❌ Error saving client:', error);
+      setError('Failed to save client: ' + error.message);
     }
   };
 
@@ -266,7 +321,7 @@ const ProductionCRM = () => {
     
     try {
       const clientName = clients.find(c => c.id === clientId)?.name || 'Unknown';
-      console.log('Deleting client:', clientName);
+      console.log('🗑️ Deleting client:', clientName);
       
       const { error } = await supabase
         .from('clients')
@@ -275,30 +330,27 @@ const ProductionCRM = () => {
       
       if (error) throw error;
       
-      console.log('Client deleted successfully');
+      console.log('✅ Client deleted successfully');
+      await loadClientsSafely();
       
       // Add audit log entry
       try {
-        await supabase
-          .from('audit_log')
-          .insert([{
-            client_id: clientId,
-            action: 'Client Deleted',
-            field_name: 'All Fields',
-            old_value: clientName,
-            new_value: `Deleted by ${user.email}`,
-            user_id: user.id,
-            created_at: new Date().toISOString()
-          }]);
+        await supabase.from('audit_log').insert([{
+          client_id: clientId,
+          action: 'Client Deleted',
+          field_name: 'All Fields',
+          old_value: clientName,
+          new_value: `Deleted by ${user.email}`,
+          user_id: user.id,
+          created_at: new Date().toISOString()
+        }]);
+        await loadAuditLogSafely();
       } catch (auditError) {
-        console.log('Audit log failed:', auditError);
+        console.log('⚠️ Audit log failed:', auditError);
       }
-      
-      await loadClients();
-      await loadAuditLog();
     } catch (error) {
-      console.error('Error deleting client:', error);
-      alert('Error deleting client: ' + error.message);
+      console.error('❌ Error deleting client:', error);
+      setError('Failed to delete client: ' + error.message);
     }
   };
 
@@ -496,8 +548,6 @@ const ProductionCRM = () => {
         alert('Please enter a client name');
         return;
       }
-      
-      console.log('Form submitted with data:', formData);
       
       const clientData = {
         ...formData,
@@ -759,25 +809,42 @@ const ProductionCRM = () => {
     );
   };
 
+  // Loading state with timeout
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-xl">Loading...</div>
+        <div className="text-center">
+          <div className="text-xl mb-4">Loading CI360 CRM...</div>
+          {error && (
+            <div className="text-red-600 text-sm mb-4">{error}</div>
+          )}
+          <div className="text-gray-500 text-sm">
+            If this takes more than 10 seconds, please refresh the page
+          </div>
+        </div>
       </div>
     );
   }
 
+  // Login screen
   if (!user) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
           <h1 className="text-2xl font-bold text-center mb-6">CI360 Client CRM</h1>
-          {(!SUPABASE_URL || !SUPABASE_ANON_KEY) && (
+          
+          {error && (
             <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
-              <p className="text-sm">⚠️ Supabase environment variables not configured.</p>
-              <p className="text-xs mt-1">Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in Vercel.</p>
+              <p className="text-sm">{error}</p>
             </div>
           )}
+
+          {(!SUPABASE_URL || !SUPABASE_ANON_KEY) && (
+            <div className="mb-4 p-3 bg-yellow-100 border border-yellow-400 text-yellow-700 rounded">
+              <p className="text-sm">⚠️ Configuration issue detected</p>
+            </div>
+          )}
+          
           <form onSubmit={signIn} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
@@ -801,7 +868,7 @@ const ProductionCRM = () => {
             </div>
             <button
               type="submit"
-              disabled={authLoading || !SUPABASE_URL || !SUPABASE_ANON_KEY}
+              disabled={authLoading}
               className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors"
             >
               {authLoading ? 'Signing in...' : 'Sign In'}
@@ -812,8 +879,21 @@ const ProductionCRM = () => {
     );
   }
 
+  // Main app
   return (
     <div className="min-h-screen bg-gray-50">
+      {error && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 text-sm">
+          {error} 
+          <button 
+            onClick={() => setError(null)} 
+            className="ml-2 underline"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       <div className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
@@ -1001,7 +1081,7 @@ const ProductionCRM = () => {
               <h2 className="text-xl font-semibold text-gray-900">Client Management</h2>
               <button
                 onClick={() => {
-                  console.log('Add Client button clicked!');
+                  console.log('🔄 Add Client button clicked');
                   setSelectedClient(null);
                   setIsEditing(true);
                 }}
