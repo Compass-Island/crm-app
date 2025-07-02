@@ -7,8 +7,8 @@ import { createClient } from '@supabase/supabase-js';
 const SUPABASE_URL = 'https://lyjknyqycyvudhkgohqv.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx5amtueXF5Y3l2dWRoa2dvaHF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE0Njg0MDgsImV4cCI6MjA2NzA0NDQwOH0.Uu7pGeWUv9hrv2cS6dgZu5HumgvNFRDAosENf4tRzxw';
 
-console.log('CRM Loading - Supabase URL:', SUPABASE_URL);
-console.log('CRM Loading - Supabase Key exists:', !!SUPABASE_ANON_KEY);
+console.log('CI360 CRM Loading - Supabase URL:', SUPABASE_URL);
+console.log('CI360 CRM Loading - Supabase Key exists:', !!SUPABASE_ANON_KEY);
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -32,7 +32,7 @@ const ProductionCRM = () => {
   const [authLoading, setAuthLoading] = useState(false);
 
   useEffect(() => {
-    console.log('CRM useEffect triggered');
+    console.log('CI360 CRM useEffect triggered');
     checkUser();
     
     // Listen for auth changes
@@ -40,7 +40,7 @@ const ProductionCRM = () => {
       console.log('Auth state changed:', event, 'User ID:', session?.user?.id);
       if (session?.user?.id) {
         setUser(session.user);
-        await loadData(session.user);
+        await loadData();
       } else {
         setUser(null);
         setClients([]);
@@ -65,7 +65,7 @@ const ProductionCRM = () => {
       if (session?.user?.id) {
         console.log('Found existing session for user:', session.user.id);
         setUser(session.user);
-        await loadData(session.user);
+        await loadData();
       } else {
         console.log('No existing session found');
       }
@@ -76,17 +76,12 @@ const ProductionCRM = () => {
     }
   };
 
-  const loadData = async (currentUser) => {
-    if (!currentUser?.id) {
-      console.log('Cannot load data: no user ID provided');
-      return;
-    }
-    
-    console.log('Loading data for user:', currentUser.id);
+  const loadData = async () => {
+    console.log('Loading shared data for all users');
     try {
       await Promise.all([
-        loadClients(currentUser),
-        loadAuditLog(currentUser)
+        loadClients(),
+        loadAuditLog()
       ]);
       console.log('Data loading completed');
     } catch (error) {
@@ -139,18 +134,12 @@ const ProductionCRM = () => {
     }
   };
 
-  const loadClients = async (currentUser = user) => {
-    if (!currentUser?.id) {
-      console.log('Cannot load clients: no user ID');
-      return;
-    }
-    
+  const loadClients = async () => {
     try {
-      console.log('Loading clients for user:', currentUser.id);
+      console.log('Loading all clients (shared view)');
       const { data, error } = await supabase
         .from('clients')
         .select('*')
-        .eq('user_id', currentUser.id)
         .order('created_at', { ascending: false });
       
       if (error) {
@@ -168,18 +157,12 @@ const ProductionCRM = () => {
     }
   };
 
-  const loadAuditLog = async (currentUser = user) => {
-    if (!currentUser?.id) {
-      console.log('Cannot load audit log: no user ID');
-      return;
-    }
-    
+  const loadAuditLog = async () => {
     try {
-      console.log('Loading audit log for user:', currentUser.id);
+      console.log('Loading all audit logs (shared view)');
       const { data, error } = await supabase
         .from('audit_log')
         .select('*')
-        .eq('user_id', currentUser.id)
         .order('created_at', { ascending: false });
       
       if (error) {
@@ -205,7 +188,7 @@ const ProductionCRM = () => {
     }
     
     try {
-      console.log('Saving client:', clientData.name, 'for user:', user.id);
+      console.log('Saving client:', clientData.name, 'by user:', user.email);
       
       const clientToSave = {
         name: clientData.name,
@@ -229,8 +212,7 @@ const ProductionCRM = () => {
             ...clientToSave,
             updated_at: new Date().toISOString()
           })
-          .eq('id', clientData.id)
-          .eq('user_id', user.id);
+          .eq('id', clientData.id);
       } else {
         // Create new client
         console.log('Creating new client');
@@ -262,7 +244,7 @@ const ProductionCRM = () => {
             action: clientData.id && clientData.id !== 'new' ? 'Client Updated' : 'Client Created',
             field_name: 'All Fields',
             old_value: '',
-            new_value: `Client: ${clientData.name}`,
+            new_value: `Client: ${clientData.name} (by ${user.email})`,
             user_id: user.id,
             created_at: new Date().toISOString()
           }]);
@@ -289,8 +271,7 @@ const ProductionCRM = () => {
       const { error } = await supabase
         .from('clients')
         .delete()
-        .eq('id', clientId)
-        .eq('user_id', user.id);
+        .eq('id', clientId);
       
       if (error) throw error;
       
@@ -305,7 +286,7 @@ const ProductionCRM = () => {
             action: 'Client Deleted',
             field_name: 'All Fields',
             old_value: clientName,
-            new_value: '',
+            new_value: `Deleted by ${user.email}`,
             user_id: user.id,
             created_at: new Date().toISOString()
           }]);
@@ -790,7 +771,7 @@ const ProductionCRM = () => {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
-          <h1 className="text-2xl font-bold text-center mb-6">CRM Login</h1>
+          <h1 className="text-2xl font-bold text-center mb-6">CI360 Client CRM</h1>
           {(!SUPABASE_URL || !SUPABASE_ANON_KEY) && (
             <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
               <p className="text-sm">⚠️ Supabase environment variables not configured.</p>
@@ -836,7 +817,7 @@ const ProductionCRM = () => {
       <div className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
-            <h1 className="text-2xl font-bold text-gray-900">CI360 CRM</h1>
+            <h1 className="text-2xl font-bold text-gray-900">CI360 Client CRM</h1>
             <div className="flex items-center space-x-4">
               <span className="text-sm text-gray-600">Welcome, {user.email}</span>
               <div className="flex space-x-2">
