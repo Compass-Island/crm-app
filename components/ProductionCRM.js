@@ -36,9 +36,9 @@ const ProductionCRM = () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       setUser(user);
-      if (user) {
-        loadClients();
-        loadAuditLog();
+      if (user?.id) {
+        await loadClients();
+        await loadAuditLog();
       }
     } catch (error) {
       console.error('Error checking user:', error);
@@ -60,8 +60,10 @@ const ProductionCRM = () => {
       if (error) throw error;
       
       setUser(data.user);
-      loadClients();
-      loadAuditLog();
+      if (data.user?.id) {
+        await loadClients();
+        await loadAuditLog();
+      }
     } catch (error) {
       alert('Error signing in: ' + error.message);
     } finally {
@@ -81,11 +83,13 @@ const ProductionCRM = () => {
   };
 
   const loadClients = async () => {
+    if (!user?.id) return;
+    
     try {
       const { data, error } = await supabase
         .from('clients')
         .select('*')
-        .eq('user_id', user?.id)
+        .eq('user_id', user.id)
         .order('created_at', { ascending: false });
       
       if (error) throw error;
@@ -96,11 +100,13 @@ const ProductionCRM = () => {
   };
 
   const loadAuditLog = async () => {
+    if (!user?.id) return;
+    
     try {
       const { data, error } = await supabase
         .from('audit_log')
         .select('*')
-        .eq('user_id', user?.id)
+        .eq('user_id', user.id)
         .order('created_at', { ascending: false });
       
       if (error) throw error;
@@ -110,7 +116,61 @@ const ProductionCRM = () => {
     }
   };
 
+  const saveClient = async (clientData) => {
+    if (!user?.id) return;
+    
+    try {
+      if (clientData.id && clientData.id !== 'new') {
+        // Update existing client
+        const { error } = await supabase
+          .from('clients')
+          .update({
+            ...clientData,
+            updated_at: new Date().toISOString(),
+            user_id: user.id
+          })
+          .eq('id', clientData.id);
+        
+        if (error) throw error;
+      } else {
+        // Create new client
+        const { error } = await supabase
+          .from('clients')
+          .insert([{
+            ...clientData,
+            user_id: user.id,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }]);
+        
+        if (error) throw error;
+      }
+      
+      // Reload clients
+      await loadClients();
+      
+      // Add audit log entry
+      await supabase
+        .from('audit_log')
+        .insert([{
+          client_id: clientData.id,
+          action: clientData.id && clientData.id !== 'new' ? 'Client Updated' : 'Client Created',
+          field_name: 'All Fields',
+          old_value: '',
+          new_value: `Client: ${clientData.name}`,
+          user_id: user.id
+        }]);
+      
+      await loadAuditLog();
+    } catch (error) {
+      console.error('Error saving client:', error);
+      alert('Error saving client: ' + error.message);
+    }
+  };
+
   const deleteClient = async (clientId) => {
+    if (!user?.id) return;
+    
     try {
       const clientName = clients.find(c => c.id === clientId)?.name || 'Unknown';
       
@@ -133,8 +193,8 @@ const ProductionCRM = () => {
           user_id: user.id
         }]);
       
-      loadClients();
-      loadAuditLog();
+      await loadClients();
+      await loadAuditLog();
     } catch (error) {
       console.error('Error deleting client:', error);
       alert('Error deleting client: ' + error.message);
@@ -240,6 +300,362 @@ const ProductionCRM = () => {
       }
     });
 
+  const TagInput = ({ tags, onTagsChange, placeholder }) => {
+    const [inputValue, setInputValue] = useState('');
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Enter' && inputValue.trim()) {
+        e.preventDefault();
+        const newTag = { value: inputValue.trim(), comment: '' };
+        onTagsChange([...tags, newTag]);
+        setInputValue('');
+      }
+    };
+
+    const removeTag = (index) => {
+      onTagsChange(tags.filter((_, i) => i !== index));
+    };
+
+    const updateTagComment = (index, comment) => {
+      const updatedTags = [...tags];
+      updatedTags[index] = { ...updatedTags[index], comment };
+      onTagsChange(updatedTags);
+    };
+
+    return (
+      <div className="space-y-2">
+        <div className="flex flex-wrap gap-2 p-2 border border-gray-300 rounded-md min-h-[40px] bg-white">
+          {tags.map((tag, index) => (
+            <div key={index} className="flex items-center bg-blue-100 text-blue-800 px-2 py-1 rounded-md text-sm">
+              <span>{tag.value}</span>
+              <button
+                type="button"
+                onClick={() => removeTag(index)}
+                className="ml-1 text-blue-600 hover:text-blue-800"
+              >
+                <Trash2 size={12} />
+              </button>
+            </div>
+          ))}
+          <input
+            type="text"
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={placeholder}
+            className="flex-1 min-w-[120px] outline-none"
+          />
+        </div>
+        {tags.map((tag, index) => (
+          <div key={index} className="flex items-center gap-2 text-sm">
+            <span className="font-medium text-gray-700">{tag.value}:</span>
+            <input
+              type="text"
+              value={tag.comment}
+              onChange={(e) => updateTagComment(index, e.target.value)}
+              placeholder="Add comment..."
+              className="flex-1 px-2 py-1 border border-gray-200 rounded text-sm"
+            />
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const ClientForm = ({ client, onSave, onCancel }) => {
+    const [formData, setFormData] = useState(() => {
+      if (client) {
+        return {
+          name: client.name || '',
+          status: client.status || 'In Progress',
+          sso_systems: client.sso_systems || [],
+          hr_integrations: client.hr_integrations || [],
+          tenants: client.tenants || [],
+          tmcs: client.tmcs || [],
+          notes: client.notes || '',
+          comments: client.comments || ''
+        };
+      }
+      return {
+        name: '',
+        status: 'In Progress',
+        sso_systems: [],
+        hr_integrations: [],
+        tenants: [],
+        tmcs: [],
+        notes: '',
+        comments: ''
+      };
+    });
+
+    const handleSubmit = async (e) => {
+      e.preventDefault();
+      
+      if (!formData.name || formData.name.trim() === '') {
+        alert('Please enter a client name');
+        return;
+      }
+      
+      const clientData = {
+        ...formData,
+        name: formData.name.trim(),
+        id: client?.id || 'new'
+      };
+      
+      await saveClient(clientData);
+      onSave();
+    };
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+        <div className="bg-white rounded-lg p-6 max-w-4xl w-full my-8 max-h-screen overflow-y-auto">
+          <h2 className="text-2xl font-bold mb-6">{client ? 'Edit Client' : 'Add New Client'}</h2>
+          
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Client Name</label>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData({...formData, name: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                <select
+                  value={formData.status}
+                  onChange={(e) => setFormData({...formData, status: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="In Progress">In Progress</option>
+                  <option value="Active">Active</option>
+                  <option value="Completed">Completed</option>
+                  <option value="On Hold">On Hold</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">SSO Systems</label>
+              <TagInput
+                tags={formData.sso_systems}
+                onTagsChange={(tags) => setFormData({...formData, sso_systems: tags})}
+                placeholder="Type SSO system and press Enter"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">HR Integrations</label>
+              <TagInput
+                tags={formData.hr_integrations}
+                onTagsChange={(tags) => setFormData({...formData, hr_integrations: tags})}
+                placeholder="Type HR integration and press Enter"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Tenants</label>
+              <TagInput
+                tags={formData.tenants}
+                onTagsChange={(tags) => setFormData({...formData, tenants: tags})}
+                placeholder="Type tenant and press Enter"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">TMCs</label>
+              <TagInput
+                tags={formData.tmcs}
+                onTagsChange={(tags) => setFormData({...formData, tmcs: tags})}
+                placeholder="Type TMC and press Enter"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+              <textarea
+                value={formData.notes}
+                onChange={(e) => setFormData({...formData, notes: e.target.value})}
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="General notes about this client..."
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Comments</label>
+              <textarea
+                value={formData.comments}
+                onChange={(e) => setFormData({...formData, comments: e.target.value})}
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Overall comments..."
+              />
+            </div>
+
+            <div className="flex justify-end space-x-3 pt-4">
+              <button
+                type="button"
+                onClick={onCancel}
+                className="px-4 py-2 text-gray-600 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+              >
+                {client ? 'Update Client' : 'Add Client'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  };
+
+  const ClientDetails = ({ client, onClose, onEdit }) => {
+    const clientAuditLog = auditLog.filter(log => log.client_id === client.id);
+    
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+        <div className="bg-white rounded-lg p-6 max-w-4xl w-full my-8 max-h-screen overflow-y-auto">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-2xl font-bold">{client.name}</h2>
+            <div className="flex space-x-2">
+              <button
+                onClick={onEdit}
+                className="px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center gap-1"
+              >
+                <Edit3 size={14} />
+                Edit
+              </button>
+              <button
+                onClick={onClose}
+                className="px-3 py-1 bg-gray-200 text-gray-600 rounded-md hover:bg-gray-300 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <div>
+              <h3 className="font-semibold text-gray-700 mb-2">Status</h3>
+              <span className={`px-2 py-1 rounded-full text-sm ${
+                client.status === 'Active' ? 'bg-green-100 text-green-800' :
+                client.status === 'In Progress' ? 'bg-yellow-100 text-yellow-800' :
+                client.status === 'Completed' ? 'bg-blue-100 text-blue-800' :
+                'bg-gray-100 text-gray-800'
+              }`}>
+                {client.status}
+              </span>
+            </div>
+            
+            <div>
+              <h3 className="font-semibold text-gray-700 mb-2">Last Updated</h3>
+              <p className="text-gray-600">{new Date(client.updated_at).toLocaleDateString()}</p>
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            <div>
+              <h3 className="font-semibold text-gray-700 mb-2">SSO Systems</h3>
+              <div className="space-y-2">
+                {(client.sso_systems || []).map((sso, index) => (
+                  <div key={index} className="bg-gray-50 p-2 rounded">
+                    <span className="font-medium">{sso.value}</span>
+                    {sso.comment && <p className="text-sm text-gray-600">{sso.comment}</p>}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <h3 className="font-semibold text-gray-700 mb-2">HR Integrations</h3>
+              <div className="space-y-2">
+                {(client.hr_integrations || []).map((hr, index) => (
+                  <div key={index} className="bg-gray-50 p-2 rounded">
+                    <span className="font-medium">{hr.value}</span>
+                    {hr.comment && <p className="text-sm text-gray-600">{hr.comment}</p>}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <h3 className="font-semibold text-gray-700 mb-2">Tenants</h3>
+              <div className="space-y-2">
+                {(client.tenants || []).map((tenant, index) => (
+                  <div key={index} className="bg-gray-50 p-2 rounded">
+                    <span className="font-medium">{tenant.value}</span>
+                    {tenant.comment && <p className="text-sm text-gray-600">{tenant.comment}</p>}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <h3 className="font-semibold text-gray-700 mb-2">TMCs</h3>
+              <div className="space-y-2">
+                {(client.tmcs || []).map((tmc, index) => (
+                  <div key={index} className="bg-gray-50 p-2 rounded">
+                    <span className="font-medium">{tmc.value}</span>
+                    {tmc.comment && <p className="text-sm text-gray-600">{tmc.comment}</p>}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <h3 className="font-semibold text-gray-700 mb-2">Notes</h3>
+              <p className="text-gray-600 bg-gray-50 p-3 rounded">{client.notes}</p>
+            </div>
+
+            <div>
+              <h3 className="font-semibold text-gray-700 mb-2">Comments</h3>
+              <p className="text-gray-600 bg-gray-50 p-3 rounded">{client.comments}</p>
+            </div>
+
+            <div>
+              <h3 className="font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                <History size={16} />
+                Audit Log for this Client
+              </h3>
+              <div className="space-y-2 max-h-60 overflow-y-auto bg-gray-50 p-3 rounded">
+                {clientAuditLog.length > 0 ? clientAuditLog.map((log, index) => (
+                  <div key={index} className="bg-white p-3 rounded text-sm border-l-4 border-blue-200">
+                    <div className="flex justify-between items-start mb-1">
+                      <span className="font-medium text-blue-800">{log.action}</span>
+                      <span className="text-gray-500 text-xs">{new Date(log.created_at).toLocaleString()}</span>
+                    </div>
+                    <div className="text-gray-700">
+                      <span className="font-medium">Field:</span> {log.field_name}
+                    </div>
+                    {log.old_value && (
+                      <div className="text-gray-600 text-xs">
+                        <span className="font-medium">Previous:</span> {log.old_value}
+                      </div>
+                    )}
+                    <div className="text-gray-800 text-xs">
+                      <span className="font-medium">New:</span> {log.new_value}
+                    </div>
+                  </div>
+                )) : (
+                  <p className="text-gray-500 text-center py-4">No changes recorded for this client yet.</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -336,43 +752,134 @@ const ProductionCRM = () => {
             <h2 className="text-xl font-semibold text-gray-900">Dashboard Overview</h2>
             
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-              <div className="bg-white p-4 rounded-lg shadow hover:shadow-lg transition-all duration-200 cursor-pointer relative">
+              <div 
+                className={`bg-white p-4 rounded-lg shadow hover:shadow-lg transition-all duration-200 cursor-pointer relative ${hoveredCard === 'onboardings' ? 'z-[90]' : 'z-10'}`}
+                style={{ zIndex: hoveredCard === 'onboardings' ? 9998 : 10 }}
+                onMouseEnter={() => setHoveredCard('onboardings')}
+                onMouseLeave={() => setHoveredCard(null)}
+              >
                 <div className="flex flex-col items-center text-center">
                   <Users className="text-blue-600 mb-2" size={20} />
                   <h3 className="text-xs font-medium text-gray-500 mb-1">Total Onboardings</h3>
                   <p className="text-xl font-bold text-gray-900">{totalOnboardings}</p>
                 </div>
+                {hoveredCard === 'onboardings' && statusChartData.length > 0 && (
+                  <HoverTooltip 
+                    data={statusChartData} 
+                    title="Onboarding Status Breakdown" 
+                    type="chart"
+                  />
+                )}
               </div>
               
-              <div className="bg-white p-4 rounded-lg shadow hover:shadow-lg transition-all duration-200 cursor-pointer relative">
+              <div 
+                className={`bg-white p-4 rounded-lg shadow hover:shadow-lg transition-all duration-200 cursor-pointer relative ${hoveredCard === 'tmcs' ? 'z-[90]' : 'z-10'}`}
+                style={{ zIndex: hoveredCard === 'tmcs' ? 9998 : 10 }}
+                onMouseEnter={() => setHoveredCard('tmcs')}
+                onMouseLeave={() => setHoveredCard(null)}
+              >
                 <div className="flex flex-col items-center text-center">
                   <Building className="text-green-600 mb-2" size={20} />
                   <h3 className="text-xs font-medium text-gray-500 mb-1">Total TMCs</h3>
                   <p className="text-xl font-bold text-gray-900">{totalTMCs}</p>
                 </div>
+                {hoveredCard === 'tmcs' && tmcChartData.length > 0 && (
+                  <HoverTooltip 
+                    data={tmcChartData} 
+                    title="TMC Distribution" 
+                    type="chart"
+                  />
+                )}
               </div>
 
-              <div className="bg-white p-4 rounded-lg shadow hover:shadow-lg transition-all duration-200 cursor-pointer relative">
+              <div 
+                className={`bg-white p-4 rounded-lg shadow hover:shadow-lg transition-all duration-200 cursor-pointer relative ${hoveredCard === 'ssos' ? 'z-[90]' : 'z-10'}`}
+                style={{ zIndex: hoveredCard === 'ssos' ? 9998 : 10 }}
+                onMouseEnter={() => setHoveredCard('ssos')}
+                onMouseLeave={() => setHoveredCard(null)}
+              >
                 <div className="flex flex-col items-center text-center">
                   <Shield className="text-purple-600 mb-2" size={20} />
                   <h3 className="text-xs font-medium text-gray-500 mb-1">Total SSOs</h3>
                   <p className="text-xl font-bold text-gray-900">{totalSSOs}</p>
                 </div>
+                {hoveredCard === 'ssos' && ssoChartData.length > 0 && (
+                  <HoverTooltip 
+                    data={ssoChartData} 
+                    title="SSO Distribution" 
+                    type="chart"
+                  />
+                )}
               </div>
               
-              <div className="bg-white p-4 rounded-lg shadow hover:shadow-lg transition-all duration-200 cursor-pointer relative">
+              <div 
+                className={`bg-white p-4 rounded-lg shadow hover:shadow-lg transition-all duration-200 cursor-pointer relative ${hoveredCard === 'mostTmc' ? 'z-[90]' : 'z-10'}`}
+                style={{ zIndex: hoveredCard === 'mostTmc' ? 9998 : 10 }}
+                onMouseEnter={() => setHoveredCard('mostTmc')}
+                onMouseLeave={() => setHoveredCard(null)}
+              >
                 <div className="flex flex-col items-center text-center">
                   <Building className="text-indigo-600 mb-2" size={20} />
                   <h3 className="text-xs font-medium text-gray-500 mb-1">Most Integrated TMC</h3>
                   <p className="text-sm font-bold text-gray-900">{mostIntegratedTMC}</p>
                 </div>
+                {hoveredCard === 'mostTmc' && tmcChartData.length > 0 && (
+                  <HoverTooltip 
+                    data={tmcChartData} 
+                    title="TMC Usage Count" 
+                    type="count"
+                  />
+                )}
               </div>
               
-              <div className="bg-white p-4 rounded-lg shadow hover:shadow-lg transition-all duration-200 cursor-pointer relative">
+              <div 
+                className={`bg-white p-4 rounded-lg shadow hover:shadow-lg transition-all duration-200 cursor-pointer relative ${hoveredCard === 'mostSso' ? 'z-[90]' : 'z-10'}`}
+                style={{ zIndex: hoveredCard === 'mostSso' ? 9998 : 10 }}
+                onMouseEnter={() => setHoveredCard('mostSso')}
+                onMouseLeave={() => setHoveredCard(null)}
+              >
                 <div className="flex flex-col items-center text-center">
                   <Shield className="text-orange-600 mb-2" size={20} />
                   <h3 className="text-xs font-medium text-gray-500 mb-1">Most Integrated SSO</h3>
                   <p className="text-sm font-bold text-gray-900">{mostIntegratedSSO}</p>
+                </div>
+                {hoveredCard === 'mostSso' && ssoChartData.length > 0 && (
+                  <HoverTooltip 
+                    data={ssoChartData} 
+                    title="SSO Usage Count" 
+                    type="count"
+                  />
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="bg-white p-6 rounded-lg shadow">
+                <h3 className="text-lg font-semibold mb-4">Recent Activity</h3>
+                <div className="space-y-3">
+                  {auditLog.slice(0, 5).map((log, index) => (
+                    <div key={index} className="flex justify-between items-center p-2 bg-gray-50 rounded">
+                      <div>
+                        <p className="font-medium text-sm">{log.action}</p>
+                        <p className="text-xs text-gray-500">{new Date(log.created_at).toLocaleDateString()}</p>
+                      </div>
+                      <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                        {clients.find(c => c.id === log.client_id)?.name || 'Unknown'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="bg-white p-6 rounded-lg shadow">
+                <h3 className="text-lg font-semibold mb-4">Status Distribution</h3>
+                <div className="space-y-2">
+                  {Object.entries(statusBreakdown).map(([status, count]) => (
+                    <div key={status} className="flex justify-between items-center">
+                      <span className="text-sm">{status}</span>
+                      <span className="text-sm font-medium">{count}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
@@ -396,12 +903,49 @@ const ProductionCRM = () => {
             </div>
 
             <div className="bg-white rounded-lg shadow">
-              <div className="overflow-x-auto">
+              <div className="p-6 border-b border-gray-200">
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <div className="flex-1">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+                      <input
+                        type="text"
+                        placeholder="Search clients..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <select
+                      value={sortField}
+                      onChange={(e) => setSortField(e.target.value)}
+                      className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="name">Name</option>
+                      <option value="status">Status</option>
+                      <option value="updated_at">Last Updated</option>
+                    </select>
+                    <button
+                      onClick={() => setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')}
+                      className="px-3 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
+                    >
+                      {sortDirection === 'asc' ? '↑' : '↓'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto max-h-96 overflow-y-auto">
                 <table className="w-full">
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Client</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SSO Systems</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">TMCs</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Updated</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                     </tr>
                   </thead>
@@ -415,22 +959,53 @@ const ProductionCRM = () => {
                           <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
                             client.status === 'Active' ? 'bg-green-100 text-green-800' :
                             client.status === 'In Progress' ? 'bg-yellow-100 text-yellow-800' :
+                            client.status === 'Completed' ? 'bg-blue-100 text-blue-800' :
                             'bg-gray-100 text-gray-800'
                           }`}>
                             {client.status}
                           </span>
                         </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-900">
+                            {(client.sso_systems || []).map(sso => sso.value).join(', ')}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-900">
+                            {(client.tmcs || []).map(tmc => tmc.value).join(', ')}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {new Date(client.updated_at).toLocaleDateString()}
+                        </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                          <button
-                            onClick={() => {
-                              if (confirm('Are you sure you want to delete this client?')) {
-                                deleteClient(client.id);
-                              }
-                            }}
-                            className="text-red-600 hover:text-red-900"
-                          >
-                            <Trash2 size={16} />
-                          </button>
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => setSelectedClient(client)}
+                              className="text-blue-600 hover:text-blue-900"
+                            >
+                              <Eye size={16} />
+                            </button>
+                            <button
+                              onClick={() => {
+                                setSelectedClient(client);
+                                setIsEditing(true);
+                              }}
+                              className="text-indigo-600 hover:text-indigo-900"
+                            >
+                              <Edit3 size={16} />
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (confirm('Are you sure you want to delete this client?')) {
+                                  deleteClient(client.id);
+                                }
+                              }}
+                              className="text-red-600 hover:text-red-900"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -442,9 +1017,32 @@ const ProductionCRM = () => {
         )}
       </div>
 
+      {/* Modals */}
+      {isEditing && (
+        <ClientForm
+          client={selectedClient}
+          onSave={() => {
+            setIsEditing(false);
+            setSelectedClient(null);
+          }}
+          onCancel={() => {
+            setIsEditing(false);
+            setSelectedClient(null);
+          }}
+        />
+      )}
+
+      {selectedClient && !isEditing && (
+        <ClientDetails
+          client={selectedClient}
+          onClose={() => setSelectedClient(null)}
+          onEdit={() => setIsEditing(true)}
+        />
+      )}
+
       {showAuditLog && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-white rounded-lg p-6 max-w-4xl w-full my-8 max-h-screen overflow-y-auto">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-bold">Audit Log</h2>
               <button
@@ -462,7 +1060,9 @@ const ProductionCRM = () => {
                     <div>
                       <h3 className="font-medium">{log.action}</h3>
                       <p className="text-sm text-gray-600">Field: {log.field_name}</p>
-                      <p className="text-sm text-gray-700">Value: {log.new_value}</p>
+                      {log.old_value && <p className="text-sm text-gray-500">Old: {log.old_value}</p>}
+                      <p className="text-sm text-gray-700">New: {log.new_value}</p>
+                      <p className="text-sm text-gray-500">Client: {clients.find(c => c.id === log.client_id)?.name || 'Unknown'}</p>
                     </div>
                     <div className="text-right">
                       <p className="text-sm text-gray-500">{new Date(log.created_at).toLocaleString()}</p>
