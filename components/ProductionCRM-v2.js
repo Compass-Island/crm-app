@@ -7,9 +7,8 @@ import { createClient } from '@supabase/supabase-js';
 const SUPABASE_URL = 'https://lyjknyqycyvudhkgohqv.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx5amtueXF5Y3l2dWRoa2dvaHF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE0Njg0MDgsImV4cCI6MjA2NzA0NDQwOH0.Uu7pGeWUv9hrv2cS6dgZu5HumgvNFRDAosENf4tRzxw';
 
-// Debug logging
-console.log('Supabase URL:', SUPABASE_URL);
-console.log('Supabase Key exists:', !!SUPABASE_ANON_KEY);
+console.log('CRM Loading - Supabase URL:', SUPABASE_URL);
+console.log('CRM Loading - Supabase Key exists:', !!SUPABASE_ANON_KEY);
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -33,12 +32,13 @@ const ProductionCRM = () => {
   const [authLoading, setAuthLoading] = useState(false);
 
   useEffect(() => {
+    console.log('CRM useEffect triggered');
     checkUser();
     
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth state changed:', event, session?.user?.id);
-      if (session?.user) {
+      console.log('Auth state changed:', event, 'User ID:', session?.user?.id);
+      if (session?.user?.id) {
         setUser(session.user);
         await loadData(session.user);
       } else {
@@ -53,14 +53,21 @@ const ProductionCRM = () => {
 
   const checkUser = async () => {
     try {
+      console.log('Checking current user...');
       const { data: { session }, error } = await supabase.auth.getSession();
-      console.log('Current session:', session?.user?.id, error);
+      console.log('Current session:', session?.user?.id, 'Error:', error);
       
-      if (error) throw error;
+      if (error) {
+        console.error('Session error:', error);
+        throw error;
+      }
       
-      if (session?.user) {
+      if (session?.user?.id) {
+        console.log('Found existing session for user:', session.user.id);
         setUser(session.user);
         await loadData(session.user);
+      } else {
+        console.log('No existing session found');
       }
     } catch (error) {
       console.error('Error checking user:', error);
@@ -71,33 +78,49 @@ const ProductionCRM = () => {
 
   const loadData = async (currentUser) => {
     if (!currentUser?.id) {
-      console.log('No user ID available for loading data');
+      console.log('Cannot load data: no user ID provided');
       return;
     }
     
     console.log('Loading data for user:', currentUser.id);
-    await Promise.all([
-      loadClients(currentUser),
-      loadAuditLog(currentUser)
-    ]);
+    try {
+      await Promise.all([
+        loadClients(currentUser),
+        loadAuditLog(currentUser)
+      ]);
+      console.log('Data loading completed');
+    } catch (error) {
+      console.error('Error loading data:', error);
+    }
   };
 
   const signIn = async (e) => {
     e.preventDefault();
     setAuthLoading(true);
     
+    console.log('Attempting sign in for:', email);
+    
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+        email: email.trim(),
+        password: password,
       });
 
-      if (error) throw error;
+      console.log('Sign in response:', { data: data?.user?.id, error });
+
+      if (error) {
+        console.error('Sign in error:', error);
+        throw error;
+      }
       
-      console.log('Sign in successful:', data.user?.id);
-      // Don't manually set user here - let the auth state change handler do it
+      if (data?.user?.id) {
+        console.log('Sign in successful for user:', data.user.id);
+        // Don't manually set user here - let the auth state change handler do it
+      } else {
+        throw new Error('No user returned from sign in');
+      }
     } catch (error) {
-      console.error('Sign in error:', error);
+      console.error('Sign in failed:', error);
       alert('Error signing in: ' + error.message);
     } finally {
       setAuthLoading(false);
@@ -106,6 +129,7 @@ const ProductionCRM = () => {
 
   const signOut = async () => {
     try {
+      console.log('Signing out user');
       await supabase.auth.signOut();
       setUser(null);
       setClients([]);
@@ -134,11 +158,10 @@ const ProductionCRM = () => {
         throw error;
       }
       
-      console.log('Loaded clients:', data?.length || 0);
+      console.log('Successfully loaded', data?.length || 0, 'clients');
       setClients(data || []);
     } catch (error) {
       console.error('Error loading clients:', error);
-      // Don't show alert for missing tables - they might not exist yet
       if (!error.message.includes('relation') && !error.message.includes('does not exist')) {
         alert('Error loading clients. Please check your database setup.');
       }
@@ -164,11 +187,10 @@ const ProductionCRM = () => {
         throw error;
       }
       
-      console.log('Loaded audit log entries:', data?.length || 0);
+      console.log('Successfully loaded', data?.length || 0, 'audit log entries');
       setAuditLog(data || []);
     } catch (error) {
       console.error('Error loading audit log:', error);
-      // Don't show alert for missing tables
       if (!error.message.includes('relation') && !error.message.includes('does not exist')) {
         alert('Error loading audit log. Please check your database setup.');
       }
@@ -177,12 +199,13 @@ const ProductionCRM = () => {
 
   const saveClient = async (clientData) => {
     if (!user?.id) {
+      console.error('Cannot save client: no authenticated user');
       alert('User not authenticated');
       return;
     }
     
     try {
-      console.log('Saving client:', clientData);
+      console.log('Saving client:', clientData.name, 'for user:', user.id);
       
       const clientToSave = {
         name: clientData.name,
@@ -196,9 +219,11 @@ const ProductionCRM = () => {
         user_id: user.id
       };
 
+      let result;
       if (clientData.id && clientData.id !== 'new') {
         // Update existing client
-        const { error } = await supabase
+        console.log('Updating existing client:', clientData.id);
+        result = await supabase
           .from('clients')
           .update({
             ...clientToSave,
@@ -206,22 +231,24 @@ const ProductionCRM = () => {
           })
           .eq('id', clientData.id)
           .eq('user_id', user.id);
-        
-        if (error) throw error;
-        console.log('Client updated successfully');
       } else {
         // Create new client
-        const { error } = await supabase
+        console.log('Creating new client');
+        result = await supabase
           .from('clients')
           .insert([{
             ...clientToSave,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
           }]);
-        
-        if (error) throw error;
-        console.log('Client created successfully');
       }
+      
+      if (result.error) {
+        console.error('Database error saving client:', result.error);
+        throw result.error;
+      }
+      
+      console.log('Client saved successfully');
       
       // Reload clients
       await loadClients();
@@ -241,6 +268,7 @@ const ProductionCRM = () => {
           }]);
         
         await loadAuditLog();
+        console.log('Audit log entry created');
       } catch (auditError) {
         console.log('Audit log failed (table might not exist):', auditError);
       }
@@ -256,6 +284,7 @@ const ProductionCRM = () => {
     
     try {
       const clientName = clients.find(c => c.id === clientId)?.name || 'Unknown';
+      console.log('Deleting client:', clientName);
       
       const { error } = await supabase
         .from('clients')
@@ -264,6 +293,8 @@ const ProductionCRM = () => {
         .eq('user_id', user.id);
       
       if (error) throw error;
+      
+      console.log('Client deleted successfully');
       
       // Add audit log entry
       try {
@@ -609,6 +640,144 @@ const ProductionCRM = () => {
     );
   };
 
+  const ClientDetails = ({ client, onClose, onEdit }) => {
+    const clientAuditLog = auditLog.filter(log => log.client_id === client.id);
+    
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+        <div className="bg-white rounded-lg p-6 max-w-4xl w-full my-8 max-h-screen overflow-y-auto">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-2xl font-bold">{client.name}</h2>
+            <div className="flex space-x-2">
+              <button
+                onClick={onEdit}
+                className="px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center gap-1"
+              >
+                <Edit3 size={14} />
+                Edit
+              </button>
+              <button
+                onClick={onClose}
+                className="px-3 py-1 bg-gray-200 text-gray-600 rounded-md hover:bg-gray-300 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <div>
+              <h3 className="font-semibold text-gray-700 mb-2">Status</h3>
+              <span className={`px-2 py-1 rounded-full text-sm ${
+                client.status === 'Active' ? 'bg-green-100 text-green-800' :
+                client.status === 'In Progress' ? 'bg-yellow-100 text-yellow-800' :
+                client.status === 'Completed' ? 'bg-blue-100 text-blue-800' :
+                'bg-gray-100 text-gray-800'
+              }`}>
+                {client.status}
+              </span>
+            </div>
+            
+            <div>
+              <h3 className="font-semibold text-gray-700 mb-2">Last Updated</h3>
+              <p className="text-gray-600">{new Date(client.updated_at).toLocaleDateString()}</p>
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            <div>
+              <h3 className="font-semibold text-gray-700 mb-2">SSO Systems</h3>
+              <div className="space-y-2">
+                {(client.sso_systems || []).map((sso, index) => (
+                  <div key={index} className="bg-gray-50 p-2 rounded">
+                    <span className="font-medium">{sso.value}</span>
+                    {sso.comment && <p className="text-sm text-gray-600">{sso.comment}</p>}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <h3 className="font-semibold text-gray-700 mb-2">HR Integrations</h3>
+              <div className="space-y-2">
+                {(client.hr_integrations || []).map((hr, index) => (
+                  <div key={index} className="bg-gray-50 p-2 rounded">
+                    <span className="font-medium">{hr.value}</span>
+                    {hr.comment && <p className="text-sm text-gray-600">{hr.comment}</p>}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <h3 className="font-semibold text-gray-700 mb-2">Tenants</h3>
+              <div className="space-y-2">
+                {(client.tenants || []).map((tenant, index) => (
+                  <div key={index} className="bg-gray-50 p-2 rounded">
+                    <span className="font-medium">{tenant.value}</span>
+                    {tenant.comment && <p className="text-sm text-gray-600">{tenant.comment}</p>}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <h3 className="font-semibold text-gray-700 mb-2">TMCs</h3>
+              <div className="space-y-2">
+                {(client.tmcs || []).map((tmc, index) => (
+                  <div key={index} className="bg-gray-50 p-2 rounded">
+                    <span className="font-medium">{tmc.value}</span>
+                    {tmc.comment && <p className="text-sm text-gray-600">{tmc.comment}</p>}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <h3 className="font-semibold text-gray-700 mb-2">Notes</h3>
+              <p className="text-gray-600 bg-gray-50 p-3 rounded">{client.notes}</p>
+            </div>
+
+            <div>
+              <h3 className="font-semibold text-gray-700 mb-2">Comments</h3>
+              <p className="text-gray-600 bg-gray-50 p-3 rounded">{client.comments}</p>
+            </div>
+
+            <div>
+              <h3 className="font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                <History size={16} />
+                Audit Log for this Client
+              </h3>
+              <div className="space-y-2 max-h-60 overflow-y-auto bg-gray-50 p-3 rounded">
+                {clientAuditLog.length > 0 ? clientAuditLog.map((log, index) => (
+                  <div key={index} className="bg-white p-3 rounded text-sm border-l-4 border-blue-200">
+                    <div className="flex justify-between items-start mb-1">
+                      <span className="font-medium text-blue-800">{log.action}</span>
+                      <span className="text-gray-500 text-xs">{new Date(log.created_at).toLocaleString()}</span>
+                    </div>
+                    <div className="text-gray-700">
+                      <span className="font-medium">Field:</span> {log.field_name}
+                    </div>
+                    {log.old_value && (
+                      <div className="text-gray-600 text-xs">
+                        <span className="font-medium">Previous:</span> {log.old_value}
+                      </div>
+                    )}
+                    <div className="text-gray-800 text-xs">
+                      <span className="font-medium">New:</span> {log.new_value}
+                    </div>
+                  </div>
+                )) : (
+                  <p className="text-gray-500 text-center py-4">No changes recorded for this client yet.</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -711,23 +880,331 @@ const ProductionCRM = () => {
             <h2 className="text-xl font-semibold text-gray-900">Dashboard Overview</h2>
             
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-              <div className="bg-white p-4 rounded-lg shadow hover:shadow-lg transition-all duration-200 cursor-pointer relative">
+              <div 
+                className={`bg-white p-4 rounded-lg shadow hover:shadow-lg transition-all duration-200 cursor-pointer relative ${hoveredCard === 'onboardings' ? 'z-[90]' : 'z-10'}`}
+                style={{ zIndex: hoveredCard === 'onboardings' ? 9998 : 10 }}
+                onMouseEnter={() => setHoveredCard('onboardings')}
+                onMouseLeave={() => setHoveredCard(null)}
+              >
                 <div className="flex flex-col items-center text-center">
                   <Users className="text-blue-600 mb-2" size={20} />
                   <h3 className="text-xs font-medium text-gray-500 mb-1">Total Onboardings</h3>
                   <p className="text-xl font-bold text-gray-900">{totalOnboardings}</p>
                 </div>
+                {hoveredCard === 'onboardings' && statusChartData.length > 0 && (
+                  <HoverTooltip 
+                    data={statusChartData} 
+                    title="Onboarding Status Breakdown" 
+                    type="chart"
+                  />
+                )}
               </div>
               
-              <div className="bg-white p-4 rounded-lg shadow hover:shadow-lg transition-all duration-200 cursor-pointer relative">
+              <div 
+                className={`bg-white p-4 rounded-lg shadow hover:shadow-lg transition-all duration-200 cursor-pointer relative ${hoveredCard === 'tmcs' ? 'z-[90]' : 'z-10'}`}
+                style={{ zIndex: hoveredCard === 'tmcs' ? 9998 : 10 }}
+                onMouseEnter={() => setHoveredCard('tmcs')}
+                onMouseLeave={() => setHoveredCard(null)}
+              >
                 <div className="flex flex-col items-center text-center">
                   <Building className="text-green-600 mb-2" size={20} />
                   <h3 className="text-xs font-medium text-gray-500 mb-1">Total TMCs</h3>
                   <p className="text-xl font-bold text-gray-900">{totalTMCs}</p>
                 </div>
+                {hoveredCard === 'tmcs' && tmcChartData.length > 0 && (
+                  <HoverTooltip 
+                    data={tmcChartData} 
+                    title="TMC Distribution" 
+                    type="chart"
+                  />
+                )}
               </div>
 
-              <div className="bg-white p-4 rounded-lg shadow hover:shadow-lg transition-all duration-200 cursor-pointer relative">
+              <div 
+                className={`bg-white p-4 rounded-lg shadow hover:shadow-lg transition-all duration-200 cursor-pointer relative ${hoveredCard === 'ssos' ? 'z-[90]' : 'z-10'}`}
+                style={{ zIndex: hoveredCard === 'ssos' ? 9998 : 10 }}
+                onMouseEnter={() => setHoveredCard('ssos')}
+                onMouseLeave={() => setHoveredCard(null)}
+              >
                 <div className="flex flex-col items-center text-center">
                   <Shield className="text-purple-600 mb-2" size={20} />
-                  
+                  <h3 className="text-xs font-medium text-gray-500 mb-1">Total SSOs</h3>
+                  <p className="text-xl font-bold text-gray-900">{totalSSOs}</p>
+                </div>
+                {hoveredCard === 'ssos' && ssoChartData.length > 0 && (
+                  <HoverTooltip 
+                    data={ssoChartData} 
+                    title="SSO Distribution" 
+                    type="chart"
+                  />
+                )}
+              </div>
+              
+              <div 
+                className={`bg-white p-4 rounded-lg shadow hover:shadow-lg transition-all duration-200 cursor-pointer relative ${hoveredCard === 'mostTmc' ? 'z-[90]' : 'z-10'}`}
+                style={{ zIndex: hoveredCard === 'mostTmc' ? 9998 : 10 }}
+                onMouseEnter={() => setHoveredCard('mostTmc')}
+                onMouseLeave={() => setHoveredCard(null)}
+              >
+                <div className="flex flex-col items-center text-center">
+                  <Building className="text-indigo-600 mb-2" size={20} />
+                  <h3 className="text-xs font-medium text-gray-500 mb-1">Most Integrated TMC</h3>
+                  <p className="text-sm font-bold text-gray-900">{mostIntegratedTMC}</p>
+                </div>
+                {hoveredCard === 'mostTmc' && tmcChartData.length > 0 && (
+                  <HoverTooltip 
+                    data={tmcChartData} 
+                    title="TMC Usage Count" 
+                    type="count"
+                  />
+                )}
+              </div>
+              
+              <div 
+                className={`bg-white p-4 rounded-lg shadow hover:shadow-lg transition-all duration-200 cursor-pointer relative ${hoveredCard === 'mostSso' ? 'z-[90]' : 'z-10'}`}
+                style={{ zIndex: hoveredCard === 'mostSso' ? 9998 : 10 }}
+                onMouseEnter={() => setHoveredCard('mostSso')}
+                onMouseLeave={() => setHoveredCard(null)}
+              >
+                <div className="flex flex-col items-center text-center">
+                  <Shield className="text-orange-600 mb-2" size={20} />
+                  <h3 className="text-xs font-medium text-gray-500 mb-1">Most Integrated SSO</h3>
+                  <p className="text-sm font-bold text-gray-900">{mostIntegratedSSO}</p>
+                </div>
+                {hoveredCard === 'mostSso' && ssoChartData.length > 0 && (
+                  <HoverTooltip 
+                    data={ssoChartData} 
+                    title="SSO Usage Count" 
+                    type="count"
+                  />
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="bg-white p-6 rounded-lg shadow">
+                <h3 className="text-lg font-semibold mb-4">Recent Activity</h3>
+                <div className="space-y-3">
+                  {auditLog.slice(0, 5).map((log, index) => (
+                    <div key={index} className="flex justify-between items-center p-2 bg-gray-50 rounded">
+                      <div>
+                        <p className="font-medium text-sm">{log.action}</p>
+                        <p className="text-xs text-gray-500">{new Date(log.created_at).toLocaleDateString()}</p>
+                      </div>
+                      <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                        {clients.find(c => c.id === log.client_id)?.name || 'Unknown'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="bg-white p-6 rounded-lg shadow">
+                <h3 className="text-lg font-semibold mb-4">Status Distribution</h3>
+                <div className="space-y-2">
+                  {Object.entries(statusBreakdown).map(([status, count]) => (
+                    <div key={status} className="flex justify-between items-center">
+                      <span className="text-sm">{status}</span>
+                      <span className="text-sm font-medium">{count}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'clients' && (
+          <div className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-xl font-semibold text-gray-900">Client Management</h2>
+              <button
+                onClick={() => {
+                  console.log('Add Client button clicked!');
+                  setSelectedClient(null);
+                  setIsEditing(true);
+                }}
+                className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors flex items-center gap-2"
+              >
+                <Plus size={18} />
+                Add Client
+              </button>
+            </div>
+
+            <div className="bg-white rounded-lg shadow">
+              <div className="p-6 border-b border-gray-200">
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <div className="flex-1">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+                      <input
+                        type="text"
+                        placeholder="Search clients..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <select
+                      value={sortField}
+                      onChange={(e) => setSortField(e.target.value)}
+                      className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="name">Name</option>
+                      <option value="status">Status</option>
+                      <option value="updated_at">Last Updated</option>
+                    </select>
+                    <button
+                      onClick={() => setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')}
+                      className="px-3 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
+                    >
+                      {sortDirection === 'asc' ? '↑' : '↓'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto max-h-96 overflow-y-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Client</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SSO Systems</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">TMCs</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Updated</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {filteredClients.map((client) => (
+                      <tr key={client.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-medium text-gray-900">{client.name}</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                            client.status === 'Active' ? 'bg-green-100 text-green-800' :
+                            client.status === 'In Progress' ? 'bg-yellow-100 text-yellow-800' :
+                            client.status === 'Completed' ? 'bg-blue-100 text-blue-800' :
+                            'bg-gray-100 text-gray-800'
+                          }`}>
+                            {client.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-900">
+                            {(client.sso_systems || []).map(sso => sso.value).join(', ')}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-900">
+                            {(client.tmcs || []).map(tmc => tmc.value).join(', ')}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {new Date(client.updated_at).toLocaleDateString()}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => setSelectedClient(client)}
+                              className="text-blue-600 hover:text-blue-900"
+                            >
+                              <Eye size={16} />
+                            </button>
+                            <button
+                              onClick={() => {
+                                setSelectedClient(client);
+                                setIsEditing(true);
+                              }}
+                              className="text-indigo-600 hover:text-indigo-900"
+                            >
+                              <Edit3 size={16} />
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (confirm('Are you sure you want to delete this client?')) {
+                                  deleteClient(client.id);
+                                }
+                              }}
+                              className="text-red-600 hover:text-red-900"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Modals */}
+      {isEditing && (
+        <ClientForm
+          client={selectedClient}
+          onSave={() => {
+            setIsEditing(false);
+            setSelectedClient(null);
+          }}
+          onCancel={() => {
+            setIsEditing(false);
+            setSelectedClient(null);
+          }}
+        />
+      )}
+
+      {selectedClient && !isEditing && (
+        <ClientDetails
+          client={selectedClient}
+          onClose={() => setSelectedClient(null)}
+          onEdit={() => setIsEditing(true)}
+        />
+      )}
+
+      {showAuditLog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-white rounded-lg p-6 max-w-4xl w-full my-8 max-h-screen overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold">Audit Log</h2>
+              <button
+                onClick={() => setShowAuditLog(false)}
+                className="px-3 py-1 bg-gray-200 text-gray-600 rounded-md hover:bg-gray-300 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+            
+            <div className="space-y-3">
+              {auditLog.map((log, index) => (
+                <div key={index} className="bg-gray-50 p-4 rounded-lg">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h3 className="font-medium">{log.action}</h3>
+                      <p className="text-sm text-gray-600">Field: {log.field_name}</p>
+                      {log.old_value && <p className="text-sm text-gray-500">Old: {log.old_value}</p>}
+                      <p className="text-sm text-gray-700">New: {log.new_value}</p>
+                      <p className="text-sm text-gray-500">Client: {clients.find(c => c.id === log.client_id)?.name || 'Unknown'}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm text-gray-500">{new Date(log.created_at).toLocaleString()}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default ProductionCRM;
