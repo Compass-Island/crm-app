@@ -920,6 +920,40 @@ const ProductionCRM = () => {
       };
     });
 
+    // Comments state for existing clients
+    const [comments, setComments] = useState([]);
+    const [newComment, setNewComment] = useState('');
+    const [loadingComments, setLoadingComments] = useState(false);
+    const [addingComment, setAddingComment] = useState(false);
+    
+    // Load comments when component mounts (only for existing clients)
+    useEffect(() => {
+      if (client?.id) {
+        const loadComments = async () => {
+          setLoadingComments(true);
+          const commentsData = await loadClientComments(client.id);
+          setComments(commentsData);
+          setLoadingComments(false);
+        };
+        
+        loadComments();
+      }
+    }, [client?.id]);
+    
+    const handleAddComment = async (e) => {
+      e.preventDefault();
+      if (!newComment.trim() || !client?.id) return;
+      
+      setAddingComment(true);
+      await addComment(client.id, newComment);
+      
+      // Reload comments to show the new one
+      const updatedComments = await loadClientComments(client.id);
+      setComments(updatedComments);
+      setNewComment('');
+      setAddingComment(false);
+    };
+
     const handleSubmit = async (e) => {
       e.preventDefault();
       
@@ -940,110 +974,200 @@ const ProductionCRM = () => {
 
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
-        <div className="bg-gray-800 rounded-lg p-6 max-w-4xl w-full my-8 max-h-screen overflow-y-auto border border-gray-700">
+        <div className="bg-gray-800 rounded-lg p-6 max-w-7xl w-full my-8 max-h-screen overflow-y-auto border border-gray-700">
           <h2 className="text-2xl font-bold mb-6 text-gray-100">{client ? 'Edit Client' : 'Add New Client'}</h2>
           
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1">Client Name</label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({...formData, name: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-500 bg-gray-700 text-gray-100 placeholder-gray-400"
-                  required
-                />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Left Column - Client Form */}
+            <div className="lg:col-span-2">
+              <form onSubmit={handleSubmit} className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-1">Client Name</label>
+                    <input
+                      type="text"
+                      value={formData.name}
+                      onChange={(e) => setFormData({...formData, name: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-500 bg-gray-700 text-gray-100 placeholder-gray-400"
+                      required
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-1">Status</label>
+                    <select
+                      value={formData.status}
+                      onChange={(e) => setFormData({...formData, status: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-500 bg-gray-700 text-gray-100"
+                    >
+                      <option value="Onboarding">Onboarding</option>
+                      <option value="Active">Active</option>
+                      <option value="Offboarded">Offboarded</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">SSO Systems</label>
+                  <TagInput
+                    tags={formData.sso_systems}
+                    onTagsChange={(tags) => setFormData({...formData, sso_systems: tags})}
+                    placeholder="Type SSO system and press Enter"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">HR Integrations</label>
+                  <TagInput
+                    tags={formData.hr_integrations}
+                    onTagsChange={(tags) => setFormData({...formData, hr_integrations: tags})}
+                    placeholder="Type HR integration and press Enter"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Tenants</label>
+                  <TagInput
+                    tags={formData.tenants}
+                    onTagsChange={(tags) => setFormData({...formData, tenants: tags})}
+                    placeholder="Type tenant and press Enter"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">TMCs</label>
+                  <TagInput
+                    tags={formData.tmcs}
+                    onTagsChange={(tags) => setFormData({...formData, tmcs: tags})}
+                    placeholder="Type TMC and press Enter"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Notes</label>
+                  <textarea
+                    value={formData.notes}
+                    onChange={(e) => setFormData({...formData, notes: e.target.value})}
+                    rows={3}
+                    className="w-full px-3 py-2 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-500 bg-gray-700 text-gray-100 placeholder-gray-400"
+                    placeholder="General notes about this client..."
+                  />
+                </div>
+
+                <div className="flex justify-end space-x-3 pt-4 border-t border-gray-700">
+                  <button
+                    type="button"
+                    onClick={onCancel}
+                    className="px-4 py-2 text-gray-300 bg-gray-600 rounded-md hover:bg-gray-500 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-500 transition-colors"
+                  >
+                    {client ? 'Update Client' : 'Add Client'}
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* Right Column - Comments (only for existing clients) */}
+            {client && client.id && (
+              <div className="space-y-6">
+                <div>
+                  <h3 className="font-semibold text-gray-300 mb-4 flex items-center gap-2">
+                    💬 Comments Timeline
+                  </h3>
+                  
+                  {/* Add Comment Form */}
+                  <form onSubmit={handleAddComment} className="mb-4">
+                    <div className="flex flex-col gap-2">
+                      <textarea
+                        value={newComment}
+                        onChange={(e) => setNewComment(e.target.value)}
+                        placeholder="Add a comment while editing..."
+                        rows={3}
+                        className="w-full px-3 py-2 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-700 text-gray-100 placeholder-gray-400 text-sm"
+                      />
+                      <button
+                        type="submit"
+                        disabled={!newComment.trim() || addingComment}
+                        className="self-end px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                      >
+                        {addingComment ? 'Adding...' : 'Add Comment'}
+                      </button>
+                    </div>
+                  </form>
+
+                  {/* Comments Display */}
+                  <div className="space-y-3 max-h-80 overflow-y-auto bg-gray-900 p-3 rounded-lg border border-gray-600">
+                    {loadingComments ? (
+                      <div className="text-gray-400 text-center py-4">Loading comments...</div>
+                    ) : comments.length > 0 ? (
+                      comments.map((comment, index) => (
+                        <div key={index} className="bg-gray-700 p-3 rounded-lg border-l-4 border-blue-500">
+                          <div className="flex justify-between items-start mb-2">
+                            <span className="font-medium text-blue-300 text-sm">{comment.user_email}</span>
+                            <span className="text-gray-400 text-xs">{new Date(comment.created_at).toLocaleString()}</span>
+                          </div>
+                          <p className="text-gray-200 text-sm leading-relaxed">{comment.comment}</p>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-gray-400 text-center py-6 border-2 border-dashed border-gray-600 rounded-lg">
+                        <p className="text-sm">No comments yet.</p>
+                        <p className="text-xs mt-1">Add one above to start the conversation!</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Quick Info Panel */}
+                <div className="bg-gray-700 p-4 rounded-lg border border-gray-600">
+                  <h4 className="font-medium text-gray-300 mb-3 flex items-center gap-2">
+                    ℹ️ Quick Info
+                  </h4>
+                  <div className="space-y-3 text-sm">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-400">Current Status:</span>
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${
+                        formData.status === 'Active' ? 'bg-green-800 text-green-200' :
+                        formData.status === 'Onboarding' ? 'bg-blue-800 text-blue-200' :
+                        formData.status === 'Offboarded' ? 'bg-red-800 text-red-200' :
+                        'bg-gray-600 text-gray-200'
+                      }`}>
+                        {formData.status}
+                      </span>
+                    </div>
+                    {client.created_at && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Created:</span>
+                        <span className="text-gray-300">{new Date(client.created_at).toLocaleDateString()}</span>
+                      </div>
+                    )}
+                    {client.updated_at && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Last Updated:</span>
+                        <span className="text-gray-300">{new Date(client.updated_at).toLocaleDateString()}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Comments:</span>
+                      <span className="text-gray-300">{comments.length}</span>
+                    </div>
+                  </div>
+                </div>
               </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1">Status</label>
-                <select
-                  value={formData.status}
-                  onChange={(e) => setFormData({...formData, status: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-500 bg-gray-700 text-gray-100"
-                >
-                  <option value="Onboarding">Onboarding</option>
-                  <option value="Active">Active</option>
-                  <option value="Offboarded">Offboarded</option>
-                </select>
+            )}
+
+            {/* Debug info - remove this after testing */}
+            {process.env.NODE_ENV === 'development' && (
+              <div className="lg:col-span-3 mt-4 p-2 bg-red-900 text-red-200 text-xs rounded">
+                Debug: Client ID = {client?.id || 'undefined'}, Client exists = {!!client ? 'true' : 'false'}
               </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">SSO Systems</label>
-              <TagInput
-                tags={formData.sso_systems}
-                onTagsChange={(tags) => setFormData({...formData, sso_systems: tags})}
-                placeholder="Type SSO system and press Enter"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">HR Integrations</label>
-              <TagInput
-                tags={formData.hr_integrations}
-                onTagsChange={(tags) => setFormData({...formData, hr_integrations: tags})}
-                placeholder="Type HR integration and press Enter"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">Tenants</label>
-              <TagInput
-                tags={formData.tenants}
-                onTagsChange={(tags) => setFormData({...formData, tenants: tags})}
-                placeholder="Type tenant and press Enter"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">TMCs</label>
-              <TagInput
-                tags={formData.tmcs}
-                onTagsChange={(tags) => setFormData({...formData, tmcs: tags})}
-                placeholder="Type TMC and press Enter"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">Notes</label>
-              <textarea
-                value={formData.notes}
-                onChange={(e) => setFormData({...formData, notes: e.target.value})}
-                rows={3}
-                className="w-full px-3 py-2 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-500 bg-gray-700 text-gray-100 placeholder-gray-400"
-                placeholder="General notes about this client..."
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">Comments</label>
-              <textarea
-                value={formData.comments}
-                onChange={(e) => setFormData({...formData, comments: e.target.value})}
-                rows={3}
-                className="w-full px-3 py-2 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-500 bg-gray-700 text-gray-100 placeholder-gray-400"
-                placeholder="Overall comments..."
-              />
-            </div>
-
-            <div className="flex justify-end space-x-3 pt-4">
-              <button
-                type="button"
-                onClick={onCancel}
-                className="px-4 py-2 text-gray-300 bg-gray-600 rounded-md hover:bg-gray-500 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-500 transition-colors"
-              >
-                {client ? 'Update Client' : 'Add Client'}
-              </button>
-            </div>
-          </form>
+            )}
+          </div>
         </div>
       </div>
     );
