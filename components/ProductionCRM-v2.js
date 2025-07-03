@@ -1055,7 +1055,7 @@ const ProductionCRM = () => {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col h-full">
         {activeTab === 'dashboard' && (
           <div className="space-y-6">
             <h2 className="text-xl font-semibold text-gray-100">Dashboard Overview</h2>
@@ -1193,8 +1193,8 @@ const ProductionCRM = () => {
         )}
 
         {activeTab === 'clients' && (
-          <div className="space-y-6">
-            <div className="flex justify-between items-center">
+          <div className="flex flex-col h-full">
+            <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-semibold text-gray-100">Client Management</h2>
               <button
                 onClick={() => {
@@ -1209,8 +1209,8 @@ const ProductionCRM = () => {
               </button>
             </div>
 
-            <div className="bg-gray-800 rounded-lg shadow">
-              <div className="p-6 border-b border-gray-700">
+            <div className="bg-gray-800 rounded-lg shadow flex-1 flex flex-col">
+              <div className="p-6 border-b border-gray-700 flex-shrink-0">
                 <div className="flex flex-col sm:flex-row gap-4">
                   <div className="flex-1">
                     <div className="relative">
@@ -1244,80 +1244,82 @@ const ProductionCRM = () => {
                 </div>
               </div>
 
-              <div className="overflow-x-auto" style={{ height: 'calc(100vh - 400px)', minHeight: '400px' }}>
-                <table className="w-full">
-                  <thead className="bg-gray-700 sticky top-0">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Client</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Status</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">SSO Systems</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">TMCs</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Last Updated</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-gray-800 divide-y divide-gray-700">
-                    {filteredClients.map((client) => (
-                      <tr key={client.id} className="hover:bg-gray-700">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-100">{client.name}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                            client.status === 'Active' ? 'bg-green-800 text-green-200' :
-                            client.status === 'Onboarding' ? 'bg-blue-800 text-blue-200' :
-                            client.status === 'Offboarded' ? 'bg-red-800 text-red-200' :
-                            'bg-gray-600 text-gray-200'
-                          }`}>
-                            {client.status}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-300">
-                            {(client.sso_systems || []).map(sso => sso.value).join(', ')}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-300">
-                            {(client.tmcs || []).map(tmc => tmc.value).join(', ')}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
-                          {new Date(client.updated_at).toLocaleDateString()}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                          <div className="flex space-x-2">
-                            <button
-                              onClick={() => setSelectedClient(client)}
-                              className="text-gray-400 hover:text-gray-200"
-                            >
-                              <Eye size={16} />
-                            </button>
-                            <button
-                              onClick={() => {
-                                setSelectedClient(client);
-                                setIsEditing(true);
-                              }}
-                              className="text-gray-400 hover:text-gray-200"
-                            >
-                              <Edit3 size={16} />
-                            </button>
-                            <button
-                              onClick={() => {
-                                if (confirm('Are you sure you want to delete this client?')) {
-                                  deleteClient(client.id);
-                                }
-                              }}
-                              className="text-red-400 hover:text-red-300"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
-                        </td>
+              <div className="flex-1 overflow-hidden">
+                <div className="h-full overflow-y-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-700 sticky top-0">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Client</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Status</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">SSO Systems</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">TMCs</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Last Updated</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Actions</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="bg-gray-800 divide-y divide-gray-700">
+                      {filteredClients.map((client) => (
+                        <tr key={client.id} className="hover:bg-gray-700">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm font-medium text-gray-100">{client.name}</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                              client.status === 'Active' ? 'bg-green-800 text-green-200' :
+                              client.status === 'Onboarding' ? 'bg-blue-800 text-blue-200' :
+                              client.status === 'Offboarded' ? 'bg-red-800 text-red-200' :
+                              'bg-gray-600 text-gray-200'
+                            }`}>
+                              {client.status}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-gray-300">
+                              {(client.sso_systems || []).map(sso => sso.value).join(', ')}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-gray-300">
+                              {(client.tmcs || []).map(tmc => tmc.value).join(', ')}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
+                            {new Date(client.updated_at).toLocaleDateString()}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <div className="flex space-x-2">
+                              <button
+                                onClick={() => setSelectedClient(client)}
+                                className="text-gray-400 hover:text-gray-200"
+                              >
+                                <Eye size={16} />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setSelectedClient(client);
+                                  setIsEditing(true);
+                                }}
+                                className="text-gray-400 hover:text-gray-200"
+                              >
+                                <Edit3 size={16} />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (confirm('Are you sure you want to delete this client?')) {
+                                    deleteClient(client.id);
+                                  }
+                                }}
+                                className="text-red-400 hover:text-red-300"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </div>
