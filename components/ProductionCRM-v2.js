@@ -22,6 +22,155 @@ try {
   console.error('❌ Failed to create Supabase client:', error);
 }
 
+// Debounced Search Hook
+const useDebounce = (value, delay) => {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+  
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+    
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [value, delay]);
+  
+  return debouncedValue;
+};
+
+// Memoized Dashboard Stats Hook
+const useDashboardStats = (clients) => {
+  return useMemo(() => {
+    const totalOnboardings = clients.length;
+    
+    // Case-insensitive TMC counting
+    const tmcCounts = clients.flatMap(c => c.tmcs?.map(t => t.value) || [])
+      .reduce((acc, tmc) => {
+        const lowerTmc = tmc.toLowerCase();
+        const existingKey = Object.keys(acc).find(key => key.toLowerCase() === lowerTmc);
+        if (existingKey) {
+          acc[existingKey] = acc[existingKey] + 1;
+        } else {
+          acc[tmc] = 1;
+        }
+        return acc;
+      }, {});
+    
+    // Case-insensitive SSO counting
+    const ssoCounts = clients.flatMap(c => c.sso_systems?.map(s => s.value) || [])
+      .reduce((acc, sso) => {
+        const lowerSso = sso.toLowerCase();
+        const existingKey = Object.keys(acc).find(key => key.toLowerCase() === lowerSso);
+        if (existingKey) {
+          acc[existingKey] = acc[existingKey] + 1;
+        } else {
+          acc[sso] = 1;
+        }
+        return acc;
+      }, {});
+    
+    const statusBreakdown = clients.reduce((acc, client) => {
+      acc[client.status] = (acc[client.status] || 0) + 1;
+      return acc;
+    }, {});
+    
+    const totalTMCs = [...new Set(clients.flatMap(c => c.tmcs?.map(t => t.value.toLowerCase()) || []))].length;
+    const totalSSOs = [...new Set(clients.flatMap(c => c.sso_systems?.map(s => s.value.toLowerCase()) || []))].length;
+    const mostIntegratedTMC = Object.keys(tmcCounts).reduce((a, b) => tmcCounts[a] > tmcCounts[b] ? a : b, '') || 'None';
+    const mostIntegratedSSO = Object.keys(ssoCounts).reduce((a, b) => ssoCounts[a] > ssoCounts[b] ? a : b, '') || 'None';
+    
+    return {
+      totalOnboardings,
+      totalTMCs,
+      totalSSOs,
+      mostIntegratedTMC,
+      mostIntegratedSSO,
+      statusChartData: Object.entries(statusBreakdown).map(([status, count]) => ({ name: status, value: count })),
+      tmcChartData: Object.entries(tmcCounts).map(([tmc, count]) => ({ name: tmc, value: count })),
+      ssoChartData: Object.entries(ssoCounts).map(([sso, count]) => ({ name: sso, value: count }))
+    };
+  }, [clients]);
+};
+
+// Optimized Client Filtering Hook
+const useFilteredClients = (clients, searchTerm, sortField, sortDirection) => {
+  const debouncedSearchTerm = useDebounce(searchTerm, 300); // 300ms debounce
+  
+  return useMemo(() => {
+    let filtered = clients;
+    
+    // Apply search filter
+    if (debouncedSearchTerm) {
+      const searchLower = debouncedSearchTerm.toLowerCase();
+      filtered = clients.filter(client => 
+        client.name.toLowerCase().includes(searchLower) ||
+        client.status.toLowerCase().includes(searchLower) ||
+        (client.sso_systems || []).some(sso => sso.value.toLowerCase().includes(searchLower)) ||
+        (client.tmcs || []).some(tmc => tmc.value.toLowerCase().includes(searchLower))
+      );
+    }
+    
+    // Apply sorting
+    return filtered.sort((a, b) => {
+      let aVal = a[sortField];
+      let bVal = b[sortField];
+      
+      if (typeof aVal === 'string') {
+        aVal = aVal.toLowerCase();
+        bVal = bVal.toLowerCase();
+      }
+      
+      if (sortDirection === 'asc') {
+        return aVal > bVal ? 1 : -1;
+      } else {
+        return aVal < bVal ? 1 : -1;
+      }
+    });
+  }, [clients, debouncedSearchTerm, sortField, sortDirection]);
+};
+
+// Pagination Hook
+const usePagination = (items, itemsPerPage = 50) => {
+  const [currentPage, setCurrentPage] = useState(1);
+  
+  const totalPages = Math.ceil(items.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentItems = items.slice(startIndex, endIndex);
+  
+  const goToPage = useCallback((page) => {
+    setCurrentPage(Math.max(1, Math.min(page, totalPages)));
+  }, [totalPages]);
+  
+  const goToNextPage = useCallback(() => {
+    setCurrentPage(prev => Math.min(prev + 1, totalPages));
+  }, [totalPages]);
+  
+  const goToPrevPage = useCallback(() => {
+    setCurrentPage(prev => Math.max(prev - 1, 1));
+  }, []);
+  
+  // Reset to page 1 when items change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [items.length]);
+  
+  return {
+    currentItems,
+    currentPage,
+    totalPages,
+    totalItems: items.length,
+    goToPage,
+    goToNextPage,
+    goToPrevPage,
+    hasNextPage: currentPage < totalPages,
+    hasPrevPage: currentPage > 1,
+    startIndex: startIndex + 1,
+    endIndex: Math.min(endIndex, items.length)
+  };
+};
+
 const ProductionCRM = () => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -36,11 +185,39 @@ const ProductionCRM = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [showAuditLog, setShowAuditLog] = useState(false);
   const [hoveredCard, setHoveredCard] = useState(null);
+  const [clientComments, setClientComments] = useState({});
 
   // Authentication
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
+
+  // Load client comments
+  const loadClientComments = async (clientId) => {
+    try {
+      if (!supabase?.from) {
+        console.log('⚠️ Supabase client not available for comments');
+        return [];
+      }
+
+      const { data, error } = await supabase
+        .from('client_comments')
+        .select('*')
+        .eq('client_id', clientId)
+        .order('created_at', { ascending: true });
+      
+      if (error) {
+        console.error('❌ Error loading comments:', error);
+        return [];
+      }
+      
+      console.log('✅ Loaded', data?.length || 0, 'comments for client', clientId);
+      return data || [];
+    } catch (error) {
+      console.error('❌ Comments loading failed:', error);
+      return [];
+    }
+  };
 
   // Updated color palette with vibrant colors
   const COLORS = [
@@ -339,8 +516,24 @@ const ProductionCRM = () => {
     if (!user?.id) return;
     
     try {
-      const clientName = clients.find(c => c.id === clientId)?.name || 'Unknown';
+      const clientToDelete = clients.find(c => c.id === clientId);
+      const clientName = clientToDelete?.name || 'Unknown';
       console.log('🗑️ Deleting client:', clientName);
+      
+      // Add audit log entry BEFORE deletion (so we have the data)
+      try {
+        await supabase.from('audit_log').insert([{
+          client_id: clientId,
+          action: 'Client Deleted',
+          field_name: 'All Fields',
+          old_value: `${clientName} - Status: ${clientToDelete?.status}, SSO: ${(clientToDelete?.sso_systems || []).map(s => s.value).join(', ')}, TMCs: ${(clientToDelete?.tmcs || []).map(t => t.value).join(', ')}`,
+          new_value: `Deleted by ${user.email}`,
+          user_id: user.id,
+          created_at: new Date().toISOString()
+        }]);
+      } catch (auditError) {
+        console.log('⚠️ Pre-deletion audit log failed:', auditError);
+      }
       
       const { error } = await supabase
         .from('clients')
@@ -351,83 +544,68 @@ const ProductionCRM = () => {
       
       console.log('✅ Client deleted successfully');
       await loadClientsSafely();
+      await loadAuditLogSafely();
       
-      // Add audit log entry
-      try {
-        await supabase.from('audit_log').insert([{
-          client_id: clientId,
-          action: 'Client Deleted',
-          field_name: 'All Fields',
-          old_value: clientName,
-          new_value: `Deleted by ${user.email}`,
-          user_id: user.id,
-          created_at: new Date().toISOString()
-        }]);
-        await loadAuditLogSafely();
-      } catch (auditError) {
-        console.log('⚠️ Audit log failed:', auditError);
-      }
     } catch (error) {
       console.error('❌ Error deleting client:', error);
       setError('Failed to delete client: ' + error.message);
     }
   };
 
-  // Dashboard stats - Case-insensitive counting
-  const totalOnboardings = clients.length;
-  
-  // Case-insensitive TMC counting
-  const totalTMCs = [...new Set(clients.flatMap(c => c.tmcs?.map(t => t.value.toLowerCase()) || []))].length;
-  
-  // Case-insensitive SSO counting
-  const totalSSOs = [...new Set(clients.flatMap(c => c.sso_systems?.map(s => s.value.toLowerCase()) || []))].length;
-  
-  const statusBreakdown = clients.reduce((acc, client) => {
-    acc[client.status] = (acc[client.status] || 0) + 1;
-    return acc;
-  }, {});
-  const statusChartData = Object.entries(statusBreakdown).map(([status, count]) => ({
-    name: status,
-    value: count
-  }));
+  // Add a new comment to a client
+  const addComment = async (clientId, commentText) => {
+    if (!user?.id || !commentText.trim()) return;
+    
+    try {
+      console.log('💬 Adding comment to client:', clientId);
+      
+      const { error } = await supabase.from('client_comments').insert([{
+        client_id: clientId,
+        comment: commentText.trim(),
+        user_id: user.id,
+        user_email: user.email,
+        created_at: new Date().toISOString()
+      }]);
+      
+      if (error) throw error;
+      
+      console.log('✅ Comment added successfully');
+      
+      // Also add to audit log
+      await supabase.from('audit_log').insert([{
+        client_id: clientId,
+        action: 'Comment Added',
+        field_name: 'Comments',
+        old_value: '',
+        new_value: `"${commentText.trim()}" by ${user.email}`,
+        user_id: user.id,
+        created_at: new Date().toISOString()
+      }]);
+      
+      await loadAuditLogSafely();
+      
+    } catch (error) {
+      console.error('❌ Error adding comment:', error);
+      setError('Failed to add comment: ' + error.message);
+    }
+  };
 
-  // Case-insensitive TMC counting with proper display names
-  const tmcCounts = clients.flatMap(c => c.tmcs?.map(t => t.value) || [])
-    .reduce((acc, tmc) => {
-      const lowerTmc = tmc.toLowerCase();
-      // Find existing entry with same lowercase value
-      const existingKey = Object.keys(acc).find(key => key.toLowerCase() === lowerTmc);
-      if (existingKey) {
-        acc[existingKey] = acc[existingKey] + 1;
-      } else {
-        acc[tmc] = 1; // Use original casing for display
-      }
-      return acc;
-    }, {});
-  const mostIntegratedTMC = Object.keys(tmcCounts).reduce((a, b) => tmcCounts[a] > tmcCounts[b] ? a : b, '') || 'None';
-  const tmcChartData = Object.entries(tmcCounts).map(([tmc, count]) => ({
-    name: tmc,
-    value: count
-  }));
+  // Dashboard stats - Now using memoized hook
+  const dashboardStats = useDashboardStats(clients);
+  const {
+    totalOnboardings,
+    totalTMCs,
+    totalSSOs,
+    mostIntegratedTMC,
+    mostIntegratedSSO,
+    statusChartData,
+    tmcChartData,
+    ssoChartData
+  } = dashboardStats;
 
-  // Case-insensitive SSO counting with proper display names
-  const ssoCounts = clients.flatMap(c => c.sso_systems?.map(s => s.value) || [])
-    .reduce((acc, sso) => {
-      const lowerSso = sso.toLowerCase();
-      // Find existing entry with same lowercase value
-      const existingKey = Object.keys(acc).find(key => key.toLowerCase() === lowerSso);
-      if (existingKey) {
-        acc[existingKey] = acc[existingKey] + 1;
-      } else {
-        acc[sso] = 1; // Use original casing for display
-      }
-      return acc;
-    }, {});
-  const mostIntegratedSSO = Object.keys(ssoCounts).reduce((a, b) => ssoCounts[a] > ssoCounts[b] ? a : b, '') || 'None';
-  const ssoChartData = Object.entries(ssoCounts).map(([sso, count]) => ({
-    name: sso,
-    value: count
-  }));
+  // Optimized client filtering and pagination
+  const filteredClients = useFilteredClients(clients, searchTerm, sortField, sortDirection);
+  const pagination = usePagination(filteredClients, 50); // 50 clients per page
 
   // Custom Pie Chart Component using SVG
   const CustomPieChart = ({ data, size = 200 }) => {
@@ -547,26 +725,85 @@ const ProductionCRM = () => {
     );
   };
 
-  const filteredClients = clients
-    .filter(client => 
-      client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      client.status.toLowerCase().includes(searchTerm.toLowerCase())
-    )
-    .sort((a, b) => {
-      let aVal = a[sortField];
-      let bVal = b[sortField];
+  const filteredClients = useFilteredClients(clients, searchTerm, sortField, sortDirection);
+  const pagination = usePagination(filteredClients, 50); // 50 clients per page
+
+  // Pagination Component
+  const PaginationControls = () => {
+    const { currentPage, totalPages, totalItems, goToPage, goToNextPage, goToPrevPage, hasNextPage, hasPrevPage, startIndex, endIndex } = pagination;
+    
+    // Generate page numbers to show
+    const getPageNumbers = () => {
+      const delta = 2;
+      const range = [];
+      const rangeWithDots = [];
       
-      if (typeof aVal === 'string') {
-        aVal = aVal.toLowerCase();
-        bVal = bVal.toLowerCase();
+      for (let i = Math.max(2, currentPage - delta); i <= Math.min(totalPages - 1, currentPage + delta); i++) {
+        range.push(i);
       }
       
-      if (sortDirection === 'asc') {
-        return aVal > bVal ? 1 : -1;
+      if (currentPage - delta > 2) {
+        rangeWithDots.push(1, '...');
       } else {
-        return aVal < bVal ? 1 : -1;
+        rangeWithDots.push(1);
       }
-    });
+      
+      rangeWithDots.push(...range);
+      
+      if (currentPage + delta < totalPages - 1) {
+        rangeWithDots.push('...', totalPages);
+      } else if (totalPages > 1) {
+        rangeWithDots.push(totalPages);
+      }
+      
+      return rangeWithDots;
+    };
+    
+    if (totalPages <= 1) return null;
+    
+    return (
+      <div className="flex items-center justify-between px-6 py-3 bg-gray-800 border-t border-gray-700">
+        <div className="flex items-center text-sm text-gray-400">
+          Showing {startIndex} to {endIndex} of {totalItems} clients
+        </div>
+        
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={goToPrevPage}
+            disabled={!hasPrevPage}
+            className="px-3 py-1 text-sm bg-gray-700 text-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-600"
+          >
+            Previous
+          </button>
+          
+          {getPageNumbers().map((page, index) => (
+            <button
+              key={index}
+              onClick={() => typeof page === 'number' && goToPage(page)}
+              disabled={page === '...'}
+              className={`px-3 py-1 text-sm rounded ${
+                page === currentPage
+                  ? 'bg-blue-600 text-white'
+                  : page === '...'
+                  ? 'text-gray-500 cursor-default'
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              }`}
+            >
+              {page}
+            </button>
+          ))}
+          
+          <button
+            onClick={goToNextPage}
+            disabled={!hasNextPage}
+            className="px-3 py-1 text-sm bg-gray-700 text-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-600"
+          >
+            Next
+          </button>
+        </div>
+      </div>
+    );
+  };
 
   const TagInput = ({ tags, onTagsChange, placeholder }) => {
     const [inputValue, setInputValue] = useState('');
@@ -787,10 +1024,40 @@ const ProductionCRM = () => {
 
   const ClientDetails = ({ client, onClose, onEdit }) => {
     const clientAuditLog = auditLog.filter(log => log.client_id === client.id);
+    const [comments, setComments] = useState([]);
+    const [newComment, setNewComment] = useState('');
+    const [loadingComments, setLoadingComments] = useState(false);
+    const [addingComment, setAddingComment] = useState(false);
+    
+    // Load comments when component mounts
+    useEffect(() => {
+      const loadComments = async () => {
+        setLoadingComments(true);
+        const commentsData = await loadClientComments(client.id);
+        setComments(commentsData);
+        setLoadingComments(false);
+      };
+      
+      loadComments();
+    }, [client.id]);
+    
+    const handleAddComment = async (e) => {
+      e.preventDefault();
+      if (!newComment.trim()) return;
+      
+      setAddingComment(true);
+      await addComment(client.id, newComment);
+      
+      // Reload comments to show the new one
+      const updatedComments = await loadClientComments(client.id);
+      setComments(updatedComments);
+      setNewComment('');
+      setAddingComment(false);
+    };
     
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
-        <div className="bg-gray-800 rounded-lg p-6 max-w-4xl w-full my-8 max-h-screen overflow-y-auto border border-gray-700">
+        <div className="bg-gray-800 rounded-lg p-6 max-w-6xl w-full my-8 max-h-screen overflow-y-auto border border-gray-700">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-bold text-gray-100">{client.name}</h2>
             <div className="flex space-x-2">
@@ -810,111 +1077,161 @@ const ProductionCRM = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-            <div>
-              <h3 className="font-semibold text-gray-300 mb-2">Status</h3>
-              <span className={`px-2 py-1 rounded-full text-sm ${
-                client.status === 'Active' ? 'bg-green-800 text-green-200' :
-                client.status === 'Onboarding' ? 'bg-blue-800 text-blue-200' :
-                client.status === 'Offboarded' ? 'bg-red-800 text-red-200' :
-                'bg-gray-600 text-gray-200'
-              }`}>
-                {client.status}
-              </span>
-            </div>
-            
-            <div>
-              <h3 className="font-semibold text-gray-300 mb-2">Last Updated</h3>
-              <p className="text-gray-400">{new Date(client.updated_at).toLocaleDateString()}</p>
-            </div>
-          </div>
-
-          <div className="space-y-6">
-            <div>
-              <h3 className="font-semibold text-gray-300 mb-2">SSO Systems</h3>
-              <div className="space-y-2">
-                {(client.sso_systems || []).map((sso, index) => (
-                  <div key={index} className="bg-gray-700 p-2 rounded">
-                    <span className="font-medium text-gray-200">{sso.value}</span>
-                    {sso.comment && <p className="text-sm text-gray-400">{sso.comment}</p>}
-                  </div>
-                ))}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Left Column - Client Info */}
+            <div className="lg:col-span-2 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <h3 className="font-semibold text-gray-300 mb-2">Status</h3>
+                  <span className={`px-2 py-1 rounded-full text-sm ${
+                    client.status === 'Active' ? 'bg-green-800 text-green-200' :
+                    client.status === 'Onboarding' ? 'bg-blue-800 text-blue-200' :
+                    client.status === 'Offboarded' ? 'bg-red-800 text-red-200' :
+                    'bg-gray-600 text-gray-200'
+                  }`}>
+                    {client.status}
+                  </span>
+                </div>
+                
+                <div>
+                  <h3 className="font-semibold text-gray-300 mb-2">Last Updated</h3>
+                  <p className="text-gray-400">{new Date(client.updated_at).toLocaleDateString()}</p>
+                </div>
               </div>
-            </div>
 
-            <div>
-              <h3 className="font-semibold text-gray-300 mb-2">HR Integrations</h3>
-              <div className="space-y-2">
-                {(client.hr_integrations || []).map((hr, index) => (
-                  <div key={index} className="bg-gray-700 p-2 rounded">
-                    <span className="font-medium text-gray-200">{hr.value}</span>
-                    {hr.comment && <p className="text-sm text-gray-400">{hr.comment}</p>}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <h3 className="font-semibold text-gray-300 mb-2">Tenants</h3>
-              <div className="space-y-2">
-                {(client.tenants || []).map((tenant, index) => (
-                  <div key={index} className="bg-gray-700 p-2 rounded">
-                    <span className="font-medium text-gray-200">{tenant.value}</span>
-                    {tenant.comment && <p className="text-sm text-gray-400">{tenant.comment}</p>}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <h3 className="font-semibold text-gray-300 mb-2">TMCs</h3>
-              <div className="space-y-2">
-                {(client.tmcs || []).map((tmc, index) => (
-                  <div key={index} className="bg-gray-700 p-2 rounded">
-                    <span className="font-medium text-gray-200">{tmc.value}</span>
-                    {tmc.comment && <p className="text-sm text-gray-400">{tmc.comment}</p>}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <h3 className="font-semibold text-gray-300 mb-2">Notes</h3>
-              <p className="text-gray-400 bg-gray-700 p-3 rounded">{client.notes}</p>
-            </div>
-
-            <div>
-              <h3 className="font-semibold text-gray-300 mb-2">Comments</h3>
-              <p className="text-gray-400 bg-gray-700 p-3 rounded">{client.comments}</p>
-            </div>
-
-            <div>
-              <h3 className="font-semibold text-gray-300 mb-2 flex items-center gap-2">
-                <History size={16} />
-                Audit Log for this Client
-              </h3>
-              <div className="space-y-2 max-h-60 overflow-y-auto bg-gray-700 p-3 rounded">
-                {clientAuditLog.length > 0 ? clientAuditLog.map((log, index) => (
-                  <div key={index} className="bg-gray-600 p-3 rounded text-sm border-l-4 border-gray-500">
-                    <div className="flex justify-between items-start mb-1">
-                      <span className="font-medium text-gray-200">{log.action}</span>
-                      <span className="text-gray-400 text-xs">{new Date(log.created_at).toLocaleString()}</span>
-                    </div>
-                    <div className="text-gray-300">
-                      <span className="font-medium">Field:</span> {log.field_name}
-                    </div>
-                    {log.old_value && (
-                      <div className="text-gray-400 text-xs">
-                        <span className="font-medium">Previous:</span> {log.old_value}
+              <div className="space-y-6">
+                <div>
+                  <h3 className="font-semibold text-gray-300 mb-2">SSO Systems</h3>
+                  <div className="space-y-2">
+                    {(client.sso_systems || []).map((sso, index) => (
+                      <div key={index} className="bg-gray-700 p-2 rounded">
+                        <span className="font-medium text-gray-200">{sso.value}</span>
+                        {sso.comment && <p className="text-sm text-gray-400">{sso.comment}</p>}
                       </div>
-                    )}
-                    <div className="text-gray-200 text-xs">
-                      <span className="font-medium">New:</span> {log.new_value}
-                    </div>
+                    ))}
                   </div>
-                )) : (
-                  <p className="text-gray-400 text-center py-4">No changes recorded for this client yet.</p>
-                )}
+                </div>
+
+                <div>
+                  <h3 className="font-semibold text-gray-300 mb-2">HR Integrations</h3>
+                  <div className="space-y-2">
+                    {(client.hr_integrations || []).map((hr, index) => (
+                      <div key={index} className="bg-gray-700 p-2 rounded">
+                        <span className="font-medium text-gray-200">{hr.value}</span>
+                        {hr.comment && <p className="text-sm text-gray-400">{hr.comment}</p>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="font-semibold text-gray-300 mb-2">Tenants</h3>
+                  <div className="space-y-2">
+                    {(client.tenants || []).map((tenant, index) => (
+                      <div key={index} className="bg-gray-700 p-2 rounded">
+                        <span className="font-medium text-gray-200">{tenant.value}</span>
+                        {tenant.comment && <p className="text-sm text-gray-400">{tenant.comment}</p>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="font-semibold text-gray-300 mb-2">TMCs</h3>
+                  <div className="space-y-2">
+                    {(client.tmcs || []).map((tmc, index) => (
+                      <div key={index} className="bg-gray-700 p-2 rounded">
+                        <span className="font-medium text-gray-200">{tmc.value}</span>
+                        {tmc.comment && <p className="text-sm text-gray-400">{tmc.comment}</p>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="font-semibold text-gray-300 mb-2">Notes</h3>
+                  <p className="text-gray-400 bg-gray-700 p-3 rounded">{client.notes}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Right Column - Timeline */}
+            <div className="space-y-6">
+              {/* Comments Timeline */}
+              <div>
+                <h3 className="font-semibold text-gray-300 mb-4 flex items-center gap-2">
+                  💬 Comments Timeline
+                </h3>
+                
+                {/* Add Comment Form */}
+                <form onSubmit={handleAddComment} className="mb-4">
+                  <div className="flex flex-col gap-2">
+                    <textarea
+                      value={newComment}
+                      onChange={(e) => setNewComment(e.target.value)}
+                      placeholder="Add a comment..."
+                      rows={3}
+                      className="w-full px-3 py-2 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-700 text-gray-100 placeholder-gray-400 text-sm"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!newComment.trim() || addingComment}
+                      className="self-end px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                    >
+                      {addingComment ? 'Adding...' : 'Add Comment'}
+                    </button>
+                  </div>
+                </form>
+
+                {/* Comments Display */}
+                <div className="space-y-3 max-h-96 overflow-y-auto">
+                  {loadingComments ? (
+                    <div className="text-gray-400 text-center py-4">Loading comments...</div>
+                  ) : comments.length > 0 ? (
+                    comments.map((comment, index) => (
+                      <div key={index} className="bg-gray-700 p-3 rounded-lg border-l-4 border-blue-500">
+                        <div className="flex justify-between items-start mb-2">
+                          <span className="font-medium text-blue-300 text-sm">{comment.user_email}</span>
+                          <span className="text-gray-400 text-xs">{new Date(comment.created_at).toLocaleString()}</span>
+                        </div>
+                        <p className="text-gray-200 text-sm leading-relaxed">{comment.comment}</p>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-gray-400 text-center py-4">No comments yet. Be the first to add one!</div>
+                  )}
+                </div>
+              </div>
+
+              {/* Audit Log */}
+              <div>
+                <h3 className="font-semibold text-gray-300 mb-4 flex items-center gap-2">
+                  <History size={16} />
+                  Activity Log
+                </h3>
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {clientAuditLog.length > 0 ? clientAuditLog.map((log, index) => (
+                    <div key={index} className="bg-gray-700 p-3 rounded text-sm border-l-4 border-gray-500">
+                      <div className="flex justify-between items-start mb-1">
+                        <span className="font-medium text-gray-200">{log.action}</span>
+                        <span className="text-gray-400 text-xs">{new Date(log.created_at).toLocaleString()}</span>
+                      </div>
+                      <div className="text-gray-300">
+                        <span className="font-medium">Field:</span> {log.field_name}
+                      </div>
+                      {log.old_value && (
+                        <div className="text-gray-400 text-xs">
+                          <span className="font-medium">Previous:</span> {log.old_value}
+                        </div>
+                      )}
+                      <div className="text-gray-200 text-xs">
+                        <span className="font-medium">New:</span> {log.new_value}
+                      </div>
+                    </div>
+                  )) : (
+                    <p className="text-gray-400 text-center py-4">No activity recorded for this client yet.</p>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -1120,6 +1437,9 @@ const ProductionCRM = () => {
                   <p className="text-sm font-bold text-gray-100">{mostIntegratedSSO}</p>
                 </div>
               </div>
+              
+              {/* Pagination */}
+              <PaginationControls />
             </div>
 
             {/* Floating tooltip overlay */}
@@ -1241,6 +1561,16 @@ const ProductionCRM = () => {
                       {sortDirection === 'asc' ? '↑' : '↓'}
                     </button>
                   </div>
+                </div>
+                
+                {/* Results info */}
+                <div className="mt-4 text-sm text-gray-400">
+                  {filteredClients.length !== clients.length && (
+                    <>Showing {filteredClients.length} of {clients.length} clients</>
+                  )}
+                  {filteredClients.length > 50 && (
+                    <> • Page {pagination.currentPage} of {pagination.totalPages}</>
+                  )}
                 </div>
               </div>
 
