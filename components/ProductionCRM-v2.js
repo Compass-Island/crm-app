@@ -307,7 +307,7 @@ const ProductionCRM = () => {
       const { data: { session }, error } = await Promise.race([
         supabase.auth.getSession(),
         new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Session check timeout')), 8000)
+          setTimeout(() => reject(new Error('Session check timeout')), 15000) // Increased timeout
         )
       ]);
 
@@ -325,7 +325,10 @@ const ProductionCRM = () => {
       }
     } catch (error) {
       console.error('❌ User check failed:', error);
-      setError('Authentication check failed - please try logging in');
+      // Don't set error for timeout, just continue to login screen
+      if (!error.message.includes('timeout')) {
+        setError('Authentication check failed - please try logging in');
+      }
     } finally {
       setLoading(false);
     }
@@ -411,7 +414,7 @@ const ProductionCRM = () => {
       const { data, error } = await Promise.race([
         supabase.from('clients').select('*').order('created_at', { ascending: false }),
         new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Clients query timeout')), 8000)
+          setTimeout(() => reject(new Error('Clients query timeout')), 15000) // Increased timeout
         )
       ]);
       
@@ -427,6 +430,10 @@ const ProductionCRM = () => {
       setClients(data || []);
     } catch (error) {
       console.error('❌ Clients loading failed:', error);
+      // Don't set error for timeout, just log it
+      if (!error.message.includes('timeout')) {
+        setError('Failed to load clients: ' + error.message);
+      }
     }
   };
 
@@ -441,7 +448,7 @@ const ProductionCRM = () => {
       const { data, error } = await Promise.race([
         supabase.from('audit_log').select('*').order('created_at', { ascending: false }),
         new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Audit log query timeout')), 8000)
+          setTimeout(() => reject(new Error('Audit log query timeout')), 15000) // Increased timeout
         )
       ]);
       
@@ -457,6 +464,10 @@ const ProductionCRM = () => {
       setAuditLog(data || []);
     } catch (error) {
       console.error('❌ Audit log loading failed:', error);
+      // Don't set error for timeout, just log it
+      if (!error.message.includes('timeout')) {
+        setError('Failed to load audit log: ' + error.message);
+      }
     }
   };
 
@@ -1516,10 +1527,10 @@ const ProductionCRM = () => {
               <div className="bg-gray-800 p-6 rounded-lg shadow">
                 <h3 className="text-lg font-semibold mb-4 text-gray-100">Status Distribution</h3>
                 <div className="space-y-2">
-                  {Object.entries(statusBreakdown).map(([status, count]) => (
-                    <div key={status} className="flex justify-between items-center">
-                      <span className="text-sm text-gray-300">{status}</span>
-                      <span className="text-sm font-medium text-gray-100">{count}</span>
+                  {statusChartData.map((item) => (
+                    <div key={item.name} className="flex justify-between items-center">
+                      <span className="text-sm text-gray-300">{item.name}</span>
+                      <span className="text-sm font-medium text-gray-100">{item.value}</span>
                     </div>
                   ))}
                 </div>
