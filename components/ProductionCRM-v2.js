@@ -608,6 +608,8 @@ const ProductionCRM = () => {
   const pagination = usePagination(filteredClients, 50); // 50 clients per page
 
   // Custom Pie Chart Component using SVG
+
+  // Custom Pie Chart Component using SVG
   const CustomPieChart = ({ data, size = 200 }) => {
     if (!data || data.length === 0) return null;
     
@@ -724,9 +726,6 @@ const ProductionCRM = () => {
       </div>
     );
   };
-
-  const filteredClients = useFilteredClients(clients, searchTerm, sortField, sortDirection);
-  const pagination = usePagination(filteredClients, 50); // 50 clients per page
 
   // Pagination Component
   const PaginationControls = () => {
