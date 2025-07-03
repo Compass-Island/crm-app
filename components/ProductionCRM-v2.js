@@ -1001,7 +1001,7 @@ const ProductionCRM = () => {
 
   // Main app
   return (
-    <div className="min-h-screen bg-gray-900">
+    <div className="min-h-screen bg-gray-900 flex flex-col">
       {error && (
         <div className="bg-red-900 border border-red-700 text-red-200 px-4 py-3 text-sm">
           {error} 
@@ -1014,7 +1014,7 @@ const ProductionCRM = () => {
         </div>
       )}
 
-      <div className="bg-gray-800 shadow-sm border-b border-gray-700">
+      <div className="bg-gray-800 shadow-sm border-b border-gray-700 flex-shrink-0">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
             <h1 className="text-2xl font-bold text-gray-100">CI360 Client CRM</h1>
@@ -1055,7 +1055,7 @@ const ProductionCRM = () => {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col h-full">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col flex-1 overflow-hidden">
         {activeTab === 'dashboard' && (
           <div className="space-y-6">
             <h2 className="text-xl font-semibold text-gray-100">Dashboard Overview</h2>
@@ -1249,21 +1249,21 @@ const ProductionCRM = () => {
                   <table className="w-full">
                     <thead className="bg-gray-700 sticky top-0">
                       <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Client</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Status</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">SSO Systems</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">TMCs</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Last Updated</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Actions</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider w-48">Client</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider w-32">Status</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider w-40">SSO Systems</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider w-48">TMCs</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider w-32">Last Updated</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider w-24">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="bg-gray-800 divide-y divide-gray-700">
                       {filteredClients.map((client) => (
                         <tr key={client.id} className="hover:bg-gray-700">
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm font-medium text-gray-100">{client.name}</div>
+                          <td className="px-6 py-4 w-48">
+                            <div className="text-sm font-medium text-gray-100 break-words">{client.name}</div>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
+                          <td className="px-6 py-4 w-32">
                             <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
                               client.status === 'Active' ? 'bg-green-800 text-green-200' :
                               client.status === 'Onboarding' ? 'bg-blue-800 text-blue-200' :
@@ -1273,20 +1273,20 @@ const ProductionCRM = () => {
                               {client.status}
                             </span>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-300">
+                          <td className="px-6 py-4 w-40">
+                            <div className="text-sm text-gray-300 break-words leading-relaxed">
                               {(client.sso_systems || []).map(sso => sso.value).join(', ')}
                             </div>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-300">
+                          <td className="px-6 py-4 w-48">
+                            <div className="text-sm text-gray-300 break-words leading-relaxed">
                               {(client.tmcs || []).map(tmc => tmc.value).join(', ')}
                             </div>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
+                          <td className="px-6 py-4 w-32 text-sm text-gray-400">
                             {new Date(client.updated_at).toLocaleDateString()}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          <td className="px-6 py-4 w-24 text-sm font-medium">
                             <div className="flex space-x-2">
                               <button
                                 onClick={() => setSelectedClient(client)}
