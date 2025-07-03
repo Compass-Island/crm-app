@@ -41,7 +41,20 @@ const useDebounce = (value, delay) => {
 
 // Memoized Dashboard Stats Hook
 const useDashboardStats = (clients) => {
-  return useMemo(() => {
+  return React.useMemo(() => {
+    if (!clients || clients.length === 0) {
+      return {
+        totalOnboardings: 0,
+        totalTMCs: 0,
+        totalSSOs: 0,
+        mostIntegratedTMC: 'None',
+        mostIntegratedSSO: 'None',
+        statusChartData: [],
+        tmcChartData: [],
+        ssoChartData: []
+      };
+    }
+    
     const totalOnboardings = clients.length;
     
     // Case-insensitive TMC counting
@@ -97,7 +110,11 @@ const useDashboardStats = (clients) => {
 const useFilteredClients = (clients, searchTerm, sortField, sortDirection) => {
   const debouncedSearchTerm = useDebounce(searchTerm, 300); // 300ms debounce
   
-  return useMemo(() => {
+  return React.useMemo(() => {
+    if (!clients || clients.length === 0) {
+      return [];
+    }
+    
     let filtered = clients;
     
     // Apply search filter
@@ -132,42 +149,42 @@ const useFilteredClients = (clients, searchTerm, sortField, sortDirection) => {
 
 // Pagination Hook
 const usePagination = (items, itemsPerPage = 50) => {
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = React.useState(1);
   
-  const totalPages = Math.ceil(items.length / itemsPerPage);
+  const totalPages = Math.ceil((items?.length || 0) / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
-  const currentItems = items.slice(startIndex, endIndex);
+  const currentItems = items?.slice(startIndex, endIndex) || [];
   
-  const goToPage = useCallback((page) => {
+  const goToPage = React.useCallback((page) => {
     setCurrentPage(Math.max(1, Math.min(page, totalPages)));
   }, [totalPages]);
   
-  const goToNextPage = useCallback(() => {
+  const goToNextPage = React.useCallback(() => {
     setCurrentPage(prev => Math.min(prev + 1, totalPages));
   }, [totalPages]);
   
-  const goToPrevPage = useCallback(() => {
+  const goToPrevPage = React.useCallback(() => {
     setCurrentPage(prev => Math.max(prev - 1, 1));
   }, []);
   
   // Reset to page 1 when items change
-  useEffect(() => {
+  React.useEffect(() => {
     setCurrentPage(1);
-  }, [items.length]);
+  }, [items?.length]);
   
   return {
     currentItems,
     currentPage,
     totalPages,
-    totalItems: items.length,
+    totalItems: items?.length || 0,
     goToPage,
     goToNextPage,
     goToPrevPage,
     hasNextPage: currentPage < totalPages,
     hasPrevPage: currentPage > 1,
     startIndex: startIndex + 1,
-    endIndex: Math.min(endIndex, items.length)
+    endIndex: Math.min(endIndex, items?.length || 0)
   };
 };
 
